@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.bak
+*.v8.bak
+
+# Log files
+*.log
+*.log.*
+logs/
+
+# Unix Sockets & System
+*.sock
+.DS_Store
+
+# Virtual Machine Disks & ISOs
+*.qcow2
+*.iso
+*.img
+*.vmdk
