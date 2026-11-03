@@ -51,7 +51,10 @@ SD1_IDLE_ACK = bytes([0x10, PC_ADDR, PLC_ADDR, 0x00, (PC_ADDR + PLC_ADDR + 0x00)
 
 
 def get_serial_node():
+    if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
+        return sys.argv[1]
     for pat in [
+        "/tmp/ttyPPI",
         "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A25ZA4HJ-if00-port0",
         "/dev/ttyUSB0",
         "/dev/ttyUSB1"

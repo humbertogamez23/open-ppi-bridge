@@ -164,13 +164,28 @@ During development, packet-level auditing on physical hardware uncovered critica
 
 ---
 
+## 📱 Mobile HMI for Industrial Gas Burner (Android APK)
+
+An industrial **Pocket HMI** built with **Flutter** connects wirelessly to the **ESP32-S3** bridge via Bluetooth Low Energy (Nordic UART Service) to monitor and control a **Siemens S7-200 (CPU 214)** controlling an industrial gas burner:
+* **Real-time digital I/O monitoring:** 14 digital inputs ($I0.0 \dots I1.5$) and 10 digital outputs ($Q0.0 \dots Q1.1$).
+* **Star-Delta Blower & Pre-purge Sequence:** Visual tracking of motor contactors ($Q0.0$ Line, $Q0.1$ Star, $Q0.2$ Delta) and safety purge timer ($T63 / VW102$).
+* **Analog Potentiometers:** Live gauges for $SMB28$ (Star time) and $SMB29$ (Pre-purge time).
+* **Industrial Safety Controls:** Secured RUN/STOP switching with modal confirmation.
+* Full documentation available in [`docs/mobile_hmi_and_gas_burner_architecture.md`](docs/mobile_hmi_and_gas_burner_architecture.md).
+* Pre-compiled APK: [`Siemens_S7_HMI_Mobile.apk`](app/s7_hmi_mobile/build/app/outputs/flutter-apk/app-release.apk).
+
+---
+
 ## 🗺️ Roadmap: Standalone Flashing & ESP32-S3
 
 * [x] Reverse-engineer complete S7comm / PPI block download sequence.
 * [x] Real-time Man-In-The-Middle proxy for QEMU/Micro/WIN (v8.6).
 * [x] Linux CLI for I/O reading, memory inspection, and RUN/STOP.
+* [x] **ESP32-S3 BLE Hardware Retrofit (`S7-200-PPI-BLE`):** Standalone firmware exposing Nordic UART Service over physical RS-485.
+* [x] **Mobile Industrial HMI (Flutter Android APK):** Native pocket HMI for remote monitoring and burner control.
+* [ ] **Gas Burner Sequence Completion (`SBR1`):** Ignition spark electrode, gas solenoid valves, and flame rectification/optical detection.
+* [ ] **Remote Parameter Tuning:** Direct write to $VW$ memory over BLE to adjust purge and ignition timings from the phone.
 * [ ] **Standalone Linux Flasher (`flash_s7_200.py`):** Flash pre-compiled `.bin` / `.awl` blocks directly from Linux terminal with zero Windows/QEMU dependency.
-* [ ] **ESP32-S3 Hardware Retrofit:** Standalone firmware to turn any S7-200 into a smart IIoT PLC with Web SCADA, Telegram alerts, and OTA program updates over WiFi/RS-485.
 
 ---
 
