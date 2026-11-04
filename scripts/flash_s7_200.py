@@ -437,9 +437,9 @@ class S7_200_Flasher:
         job_seq = (down_job[11] << 8) | down_job[12]
         print(f"[✓] PLC solicitó el bloque: _DOWN (seq=0x{job_seq:04X})")
 
-        # 4. Despacho de paquetes de datos (Segmentación si > 218 bytes)
-        # La CPU 214 requiere bloques de máximo 218 bytes de datos útiles por PDU
-        CHUNK_SIZE = 218
+        # 4. Despacho de paquetes de datos (Segmentación si > 219 bytes)
+        # La CPU 214 requiere bloques de máximo 219 bytes de datos útiles por PDU
+        CHUNK_SIZE = 219
         offset = 0
         chunk_idx = 1
 
@@ -450,14 +450,15 @@ class S7_200_Flasher:
 
             # Cabecera de datos S7comm para _DOWN
             # 1B [has_more 0x01/0x00] [chunk_len 2B] 00 [payload]
-            chunk_len_field = len(chunk)
+            chunk_len_field = len(chunk) - 1
             data_hdr = bytes([0x1B, 0x01 if has_more else 0x00, (chunk_len_field >> 8) & 0xFF, chunk_len_field & 0xFF, 0x00])
             full_data = data_hdr + chunk
 
+            s7_data_len = len(full_data) - 2
             pdu_down_ack = bytes([
                 0x32, 0x03, 0x00, 0x00, (job_seq >> 8) & 0xFF, job_seq & 0xFF,
                 0x00, 0x02,
-                (len(full_data) >> 8) & 0xFF, len(full_data) & 0xFF,
+                (s7_data_len >> 8) & 0xFF, s7_data_len & 0xFF,
                 0x00, 0x00
             ]) + full_data
 
