@@ -4,34 +4,40 @@ BEGIN
 Network 1 
 LD     SM0.0
 CALL   SBR2
-Network 2 // Marcha / Paro (Fisico I0.0 / I0.1 y App V200.0 / V200.1)
+Network 2 // Marcha / Retencion de Ciclo (Fisico I0.0 / I0.1 y App V200.0)
 LD     I0.0
 O      V200.0
-LD     M0.0
-OLD
+O      M0.0
 A      I0.1
-AN     V200.1
 AN     T101
 =      M0.0
-Network 3 // Parada Temporizada (Fisico I0.3 o Parada App V200.1)
+Network 3 // Inicio de Post-Purga (Fisico I0.3 o App V200.1)
 LD     I0.3
 O      V200.1
 O      M0.1
+A      M0.0
+A      I0.1
 AN     T101
 =      M0.1
-Network 4 
+Network 4 // Temporizador de Post-purga 30 segundos (Base 100ms, 300 ticks)
 LD     M0.1
 TON    T101, 300
-Network 5 
-LD     M0.0
+Network 5 // Llamada incondicional a Estrella-Delta y Reset de Seguridad
+LD     SM0.0
 CALL   SBR0
-Network 6 
+LDN    M0.0
+R      Q0.0, 3
+Network 6 // Retardo de Ignicion Quemador (Bloqueado durante Post-purga M0.1)
 LD     Q0.2
 AN     Q0.4
+AN     M0.1
+A      M0.0
 TON    T63, VW102
-Network 7 
+Network 7 // Control Quemador / Honeywell (Interlock con Q0.2, M0.0 y M0.1)
 LD     T63
 O      Q0.4
+A      Q0.2
+A      M0.0
 AN     M0.1
 =      Q0.4
 Network 8 
@@ -47,7 +53,7 @@ SUBROUTINE_BLOCK SBR_0:SBR0
 TITLE=ARRANQUE ESTRELLA DELTA
 BEGIN
 Network 1 // Arranque Contactor de Línea Principal
-LD     SM0.0
+LD     M0.0
 =      Q0.0
 Network 2 // Temporizador Estrella (Base 100ms)
 LD     Q0.0
@@ -63,11 +69,12 @@ LD     Q0.0
 A      T37
 AN     Q0.2
 TON    T33, 60
-Network 5 // Contactor Delta con auto-retención
+Network 5 // Contactor Delta con auto-retención e interlock M0.0
 LD     T33
 LD     Q0.0
 A      Q0.2
 OLD
+A      M0.0
 =      Q0.2
 END_SUBROUTINE_BLOCK
 SUBROUTINE_BLOCK SBR_1:SBR1
