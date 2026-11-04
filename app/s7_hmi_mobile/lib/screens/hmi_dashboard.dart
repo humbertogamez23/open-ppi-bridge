@@ -214,6 +214,7 @@ class HmiDashboard extends StatelessWidget {
                       border: Border.all(color: const Color(0xFF2C3942)),
                     ),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -221,8 +222,8 @@ class HmiDashboard extends StatelessWidget {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text("ESTADO OPERATIVO", style: TextStyle(color: Color(0xFF90A4AE), fontSize: 11, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 4),
+                                const Text("MODO CPU (SIEMENS S7-200)", style: TextStyle(color: Color(0xFF90A4AE), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                                const SizedBox(height: 6),
                                 Row(
                                   children: [
                                     Container(
@@ -270,6 +271,101 @@ class HmiDashboard extends StatelessWidget {
                               ],
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          state.cpuMode == "RUN"
+                              ? "Scan activo de lógica ladder (Listo para comandos)"
+                              : "Procesador en pausa técnica (Salidas deshabilitadas)",
+                          style: const TextStyle(color: Colors.white54, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // BANNER PROMINENTE: ESTADO DEL PROCESO Y QUEMADOR
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E262C),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: state.machineStatusColor.withValues(alpha: 0.8),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: state.machineStatusColor.withValues(alpha: 0.15),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: state.machineStatusColor.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: state.machineStatusColor.withValues(alpha: 0.4)),
+                          ),
+                          child: Icon(
+                            state.machineStatusIcon,
+                            color: state.machineStatusColor,
+                            size: 26,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    "ESTADO DEL PROCESO / QUEMADOR",
+                                    style: TextStyle(
+                                      color: Color(0xFF90A4AE),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.8,
+                                    ),
+                                  ),
+                                  if (state.m0_1)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.cyanAccent.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        "POST-PURGA 30s",
+                                        style: TextStyle(color: Colors.cyanAccent, fontSize: 9, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                state.machineStatusTitle,
+                                style: TextStyle(
+                                  color: state.machineStatusColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                state.machineStatusSubtitle,
+                                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -688,7 +784,7 @@ class _PulsadorControlCardState extends State<_PulsadorControlCard> {
                           ),
                         ),
                         Text(
-                          "Pulso $stopAddress",
+                          "Pulso $stopAddress (Post-Purga 30s)",
                           style: const TextStyle(color: Colors.white70, fontSize: 10),
                         ),
                       ],

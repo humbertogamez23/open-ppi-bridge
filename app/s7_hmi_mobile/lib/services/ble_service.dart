@@ -333,7 +333,7 @@ class BleService {
         if (switchRun) {
           mode = "RUN";
         } else if (mode == "DESCONOCIDO") {
-          mode = "TERM";
+          mode = "RUN";
         }
       }
       await Future.delayed(const Duration(milliseconds: 35));
@@ -366,12 +366,12 @@ class BleService {
       }
       await Future.delayed(const Duration(milliseconds: 35));
 
-      // Si hay salidas activas o el PLC está ejecutando, asegurar modo RUN si no fue detenido explícitamente
-      if (newOutputs.any((b) => b) && mode != "STOP") {
-        mode = "RUN";
-      }
+      // 4. Leer Marcas de control de proceso (MB0: M0.0 = Marcha, M0.1 = Post-purga)
+      List<int>? mb = await readMemoryArea(PpiProtocol.areaM, 0, 1);
+      int mb0 = (mb != null && mb.isNotEmpty) ? mb[0] : state.mb0;
+      await Future.delayed(const Duration(milliseconds: 35));
 
-      // 4. Leer Potenciómetros (SMB28, SMB29)
+      // 5. Leer Potenciómetros (SMB28, SMB29)
       List<int>? pots = await readMemoryArea(PpiProtocol.areaSM, 28, 2);
       int p0 = pots != null && pots.isNotEmpty ? pots[0] : state.pot0;
       int p1 = pots != null && pots.length >= 2 ? pots[1] : state.pot1;
@@ -383,8 +383,9 @@ class BleService {
         newOutputs: newOutputs,
         p0: p0,
         p1: p1,
+        newMb0: mb0,
       );
-      state.addLog("[✓] Refresco OK: Modo $mode, I0.1=${newInputs[1] ? 1 : 0}, Pot0=$p0, Pot1=$p1");
+      state.addLog("[✓] Refresco: CPU $mode | Proceso: ${state.machineStatusTitle}");
     } finally {
       _isRefreshing = false;
     }
