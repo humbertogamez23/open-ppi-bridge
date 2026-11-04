@@ -29,6 +29,7 @@ class PlcState extends ChangeNotifier {
   void addLog(String msg) {
     final now = DateTime.now();
     final timeStr = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+    debugPrint("[HMI] $msg");
     logs.insert(0, "[$timeStr] $msg");
     if (logs.length > 60) logs.removeLast();
     notifyListeners();

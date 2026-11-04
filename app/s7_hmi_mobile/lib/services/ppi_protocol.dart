@@ -49,11 +49,12 @@ class PpiProtocol {
     int seq = 1,
   }) {
     int startBit = startByte * 8;
+    int dbNum = (areaCode == areaV) ? 1 : 0;
     return [
       0x32, 0x01, 0x00, 0x00, (seq >> 8) & 0xFF, seq & 0xFF, 0x00, 0x0E, 0x00, 0x00,
       0x04, 0x01, 0x12, 0x0A, 0x10, 0x02,
       (count >> 8) & 0xFF, count & 0xFF,
-      0x00, 0x00,
+      (dbNum >> 8) & 0xFF, dbNum & 0xFF,
       areaCode,
       (startBit >> 16) & 0xFF, (startBit >> 8) & 0xFF, startBit & 0xFF,
     ];
@@ -74,8 +75,30 @@ class PpiProtocol {
     ];
   }
 
+  /// Construye la PDU para escribir un byte completo (Función 0x05 Write)
+  /// En S7-200, la memoria V (0x84) se direcciona como DB1.
+  /// En la cabecera de datos de solicitud, el primer byte es reservado (0x00).
+  static List<int> buildWriteBytePdu({
+    required int areaCode,
+    required int startByte,
+    required int value,
+    int seq = 1,
+  }) {
+    int startBit = startByte * 8;
+    int dbNum = (areaCode == areaV) ? 1 : 0;
+    return [
+      0x32, 0x01, 0x00, 0x00, (seq >> 8) & 0xFF, seq & 0xFF, 0x00, 0x0E, 0x00, 0x05,
+      0x05, 0x01, 0x12, 0x0A, 0x10, 0x02, 0x00, 0x01,
+      (dbNum >> 8) & 0xFF, dbNum & 0xFF,
+      areaCode,
+      (startBit >> 16) & 0xFF, (startBit >> 8) & 0xFF, startBit & 0xFF,
+      0x00, 0x04, 0x00, 0x08, value & 0xFF,
+    ];
+  }
+
   /// Construye la PDU para escribir un bit individual (Función 0x05 Write)
-  /// areaCode: areaI (0x81), areaQ (0x82), areaM (0x83), areaV (0x84)
+  /// En S7-200, la memoria V (0x84) se direcciona como DB1.
+  /// En la cabecera de datos de solicitud, el primer byte es reservado (0x00).
   static List<int> buildWriteBitPdu({
     required int areaCode,
     required int startByte,
@@ -84,9 +107,11 @@ class PpiProtocol {
     int seq = 1,
   }) {
     int startBit = (startByte * 8) + bitIndex;
+    int dbNum = (areaCode == areaV) ? 1 : 0;
     return [
       0x32, 0x01, 0x00, 0x00, (seq >> 8) & 0xFF, seq & 0xFF, 0x00, 0x0E, 0x00, 0x05,
-      0x05, 0x01, 0x12, 0x0A, 0x10, 0x01, 0x00, 0x01, 0x00, 0x00,
+      0x05, 0x01, 0x12, 0x0A, 0x10, 0x01, 0x00, 0x01,
+      (dbNum >> 8) & 0xFF, dbNum & 0xFF,
       areaCode,
       (startBit >> 16) & 0xFF, (startBit >> 8) & 0xFF, startBit & 0xFF,
       0x00, 0x03, 0x00, 0x01, value ? 0x01 : 0x00,

@@ -4,15 +4,18 @@ BEGIN
 Network 1 
 LD     SM0.0
 CALL   SBR2
-Network 2 // Marcha / Paro (Retención M0.0 corregida: LD en vez de LDN)
+Network 2 // Marcha / Paro (Fisico I0.0 / I0.1 y App V200.0 / V200.1)
 LD     I0.0
-A      I0.1
+O      V200.0
 LD     M0.0
-AN     T101
 OLD
+A      I0.1
+AN     V200.1
+AN     T101
 =      M0.0
-Network 3 
+Network 3 // Parada Temporizada (Fisico I0.3 o Parada App V200.1)
 LD     I0.3
+O      V200.1
 O      M0.1
 AN     T101
 =      M0.1
@@ -34,6 +37,11 @@ AN     M0.1
 Network 8 
 LD     Q0.4
 CALL   SBR1
+Network 9 // Auto-reset de pulsadores de la App (Seguridad contra perdida de enlace)
+LD     V200.0
+R      V200.0, 1
+LD     V200.1
+R      V200.1, 1
 END_ORGANIZATION_BLOCK
 SUBROUTINE_BLOCK SBR_0:SBR0
 TITLE=ARRANQUE ESTRELLA DELTA

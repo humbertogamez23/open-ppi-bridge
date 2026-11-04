@@ -168,3 +168,70 @@ When a transaction fails, the error code is returned in bytes 17–18 of the S7c
 | **`0xD230`** | Structural error in block | The compiled bytecode contains invalid opcodes, inconsistent block headers, or references to empty subroutines (`CALL SBR` with no instructions). |
 | **`0xD240`** | Internal coordination violation | 1. Transfer aborted prematurely due to duplicate FCB on Chunk 1.<br/>2. An online monitoring session is currently active. |
 | **`0xD201`** | Block not found | Attempted to read or delete a non-existent block. |
+
+---
+
+## 7. Memory Addressing & S7comm Variable Access (Read/Write)
+
+### 7.1. Memory Area Codes (S7-200)
+
+| Memory Area | Identifier | S7 Area Code (Hex) | DB Number Parameter | Addressing Granularity |
+| :---: | :---: | :---: | :---: | :---: |
+| **Physical Inputs** | `I` / `IB` / `IW` | `0x81` | `0x0000` | Bit (`0x01`) or Byte (`0x02`) |
+| **Physical Outputs** | `Q` / `QB` / `QW` | `0x82` | `0x0000` | Bit (`0x01`) or Byte (`0x02`) |
+| **Internal Markers** | `M` / `MB` / `MW` | `0x83` | `0x0000` | Bit (`0x01`) or Byte (`0x02`) |
+| **Variable Memory** | `V` / `VB` / `VW` | `0x84` | **`0x0001` (DB1)** | Bit (`0x01`) or Byte (`0x02`) |
+| **Special Markers** | `SM` / `SMB` / `SMW` | `0x05` | `0x0000` | Byte (`0x02`) |
+
+> [!CRITICAL]
+> **The S7-200 V-Memory DB1 Mapping Rule:**  
+> In the S7comm protocol specification, area code `0x84` designates Data Blocks (`DB`). Because legacy SIMATIC S7-200 CPUs feature a flat Variable Memory space ($V$) rather than modular data blocks, the firmware internally maps **V-Memory exclusively to DB1** (`0x00, 0x01`).  
+> * If an external client attempts to read or write area `0x84` with `DB Number = 0x0000`, the PLC immediately aborts the item with error **`0x03` (`S7COMM_ITEM_RETVAL_DATA_ACCESS_FAULT`: Accessing the object not allowed)**.  
+> * Specifying `DB Number = 0x0001` resolves this 100%, returning **`0xFF` (Success)**.
+
+### 7.2. Write Variable (`0x05`) Telegram Layout
+
+A Write Var request payload is partitioned into an **Item Address Specification** and a **Data Section**:
+
+```
+[S7comm Header (10 bytes)]
+  0x32 0x01 0x00 0x00 [SeqH SeqL] 0x00 0x0E [DataLenH DataLenL]
+
+[Parameter Block (14 bytes)]
+  0x05 (Function: Write Var)
+  0x01 (Item Count: 1)
+  0x12 (VarSpec Syntax)
+  0x0A (Spec Length: 10 bytes)
+  0x10 (Syntax ID: S7ANY)
+  0x02 (Transport Size: Byte=0x02, Bit=0x01)
+  0x00 0x01 (Length / Element Count: 1)
+  0x00 0x01 (DB Number: 0x0001 for V-Memory; 0x0000 for I, Q, M)
+  0x84 (Area Code: 0x84 for V; 0x83 for M)
+  [StartBit2 StartBit1 StartBit0] (Byte offset * 8 + Bit offset)
+
+[Data Section (5 bytes for Byte Write)]
+  0x00 (Reserved Return Code in request direction - MUST be 0x00)
+  0x04 (Transport Size: 0x04 = Byte/Word/DWord stream; 0x03 = Bit stream)
+  0x00 0x08 (Data Length in BITS: 8 bits = 1 byte; 1 bit = 0x0001)
+  [Value] (Actual byte payload: e.g. 0x01 for Start, 0x02 for Stop, 0x00 for Reset)
+```
+
+### 7.3. Item Return Status Codes in S7comm Ack_Data
+
+| Code (Hex) | Status Name | Description / Diagnosis |
+| :---: | :--- | :--- |
+| **`0xFF`** | `DATA_OK` | **Success:** Item written or read successfully. |
+| **`0x01`** | `DATA_HW_FAULT` | Hardware fault on the targeted module. |
+| **`0x03`** | `DATA_ACCESS_FAULT` | Accessing the object not allowed (e.g. DB0 requested on S7-200, or protected area). |
+| **`0x05`** | `DATA_OUTOFRANGE` | Address exceeds memory boundaries for this CPU model. |
+| **`0x06`** | `DATA_NOT_SUP` | Data type / transport size not supported. |
+| **`0x0A`** | `DATA_ERR` | Item or data block does not exist. |
+
+### 7.4. CPU Operational State Detection (`SMB0`)
+
+In SIMATIC S7-200 PLCs, byte `SMB0` contains system status flags:
+* **`SM0.0` (Bit 0):** **Always ON (`1`)**. Checking this bit will erroneously report RUN even when the CPU is stopped.
+* **`SM0.7` (Bit 7):** **Hardware Key Position**. `1` = Selector in `RUN`; `0` = Selector in `TERM` / `STOP`.
+* **State Detection Logic:**
+  1. If `SM0.7 == 1`, the CPU is in physical `RUN`.
+  2. If `SM0.7 == 0` (Key in `TERM`), the CPU operational state is determined by software command (`0x28 RUN` or `0x29 STOP`) and validated by scanning output image activity (`QB0..QB1`).

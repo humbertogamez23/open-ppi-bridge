@@ -262,6 +262,33 @@ class BleService {
     return PpiProtocol.extractDataPayload(rawFrame, count);
   }
 
+  /// Escribe un byte completo en el PLC (I, Q, M, V)
+  Future<bool> writeByte(int areaCode, int byteIndex, int value) async {
+    state.addLog("[TX] Escribir byte $byteIndex = 0x${value.toRadixString(16).padLeft(2, '0').toUpperCase()}");
+    List<int> pdu = PpiProtocol.buildWriteBytePdu(
+      areaCode: areaCode,
+      startByte: byteIndex,
+      value: value,
+    );
+    List<int>? rawFrame = await sendS7Request(pdu);
+    bool ok = false;
+    if (rawFrame != null && rawFrame.length >= 21) {
+      int retCode = rawFrame[rawFrame.length - 3];
+      ok = (retCode == 0xFF);
+      if (ok) {
+        state.addLog("[✓] Escritura confirmada (OK 0xFF) por PLC");
+      } else {
+        state.addLog("[-] PLC rechazó escritura (Código 0x${retCode.toRadixString(16).padLeft(2, '0').toUpperCase()})");
+      }
+    } else {
+      state.addLog("[-] Sin respuesta del PLC a la orden de escritura");
+    }
+    if (!state.isPolling) {
+      await refreshPlcData();
+    }
+    return ok;
+  }
+
   /// Escribe un bit individual en el PLC (I, Q, M, V)
   Future<bool> writeBit(int areaCode, int byteIndex, int bitIndex, bool value) async {
     state.addLog("[TX] Escribir bit $byteIndex.$bitIndex = ${value ? 1 : 0}");
@@ -272,8 +299,18 @@ class BleService {
       value: value,
     );
     List<int>? rawFrame = await sendS7Request(pdu);
-    bool ok = rawFrame != null;
-    state.addLog(ok ? "[✓] Escritura confirmada por el PLC" : "[-] Falló escritura en PLC");
+    bool ok = false;
+    if (rawFrame != null && rawFrame.length >= 21) {
+      int retCode = rawFrame[rawFrame.length - 3];
+      ok = (retCode == 0xFF);
+      if (ok) {
+        state.addLog("[✓] Escritura bit confirmada (OK 0xFF) por PLC");
+      } else {
+        state.addLog("[-] PLC rechazó bit (Código 0x${retCode.toRadixString(16).padLeft(2, '0').toUpperCase()})");
+      }
+    } else {
+      state.addLog("[-] Sin respuesta del PLC a la orden de escritura bit");
+    }
     if (!state.isPolling) {
       await refreshPlcData();
     }
@@ -286,15 +323,18 @@ class BleService {
     _isRefreshing = true;
 
     try {
-      // 1. Leer Modo y Llave (SMB0, SMB1)
+      // 1. Leer Llave física y estado (SMB0, SMB1)
       List<int>? smb = await readMemoryArea(PpiProtocol.areaSM, 0, 2);
       String mode = state.cpuMode;
       String key = state.keyPosition;
       if (smb != null && smb.isNotEmpty) {
-        bool isRun = (smb[0] & 0x01) != 0;
-        mode = isRun ? "RUN" : "STOP";
-        bool switchRun = (smb[0] & 0x80) != 0;
+        bool switchRun = (smb[0] & 0x80) != 0; // SM0.7: 1 = Llave en RUN, 0 = TERM / STOP
         key = switchRun ? "RUN" : "TERM";
+        if (switchRun) {
+          mode = "RUN";
+        } else if (mode == "DESCONOCIDO") {
+          mode = "TERM";
+        }
       }
       await Future.delayed(const Duration(milliseconds: 35));
 
@@ -326,6 +366,11 @@ class BleService {
       }
       await Future.delayed(const Duration(milliseconds: 35));
 
+      // Si hay salidas activas o el PLC está ejecutando, asegurar modo RUN si no fue detenido explícitamente
+      if (newOutputs.any((b) => b) && mode != "STOP") {
+        mode = "RUN";
+      }
+
       // 4. Leer Potenciómetros (SMB28, SMB29)
       List<int>? pots = await readMemoryArea(PpiProtocol.areaSM, 28, 2);
       int p0 = pots != null && pots.isNotEmpty ? pots[0] : state.pot0;
@@ -350,9 +395,16 @@ class BleService {
     state.addLog("[TX] Conmutando CPU a ${run ? 'RUN' : 'STOP'}...");
     List<int> pdu = PpiProtocol.buildModeCommandPdu(run);
     List<int>? resp = await sendS7Request(pdu);
+    bool ok = resp != null;
+    if (ok) {
+      state.cpuMode = run ? "RUN" : "STOP";
+      state.addLog("[✓] CPU conmutada a ${run ? 'RUN' : 'STOP'} con éxito");
+    } else {
+      state.addLog("[-] El PLC no confirmó el cambio de modo");
+    }
     await Future.delayed(const Duration(milliseconds: 250));
     await refreshPlcData();
-    return resp != null;
+    return ok;
   }
 
   bool _pollingActive = false;

@@ -33,14 +33,16 @@ flowchart TD
 
 El programa del PLC implementa una secuencia de seguridad para combustión industrial basada en estándares internacionales (**NFPA 85 / EN 676**):
 
-### 2.1 Asignación de Entradas y Salidas
-| Identificador | Tipo | Elemento Físico en Quemador | Función Técnica de Seguridad |
+### 2.1 Asignación de Entradas, Memoria y Salidas
+| Identificador | Tipo | Elemento Físico / Mando HMI | Función Técnica de Seguridad |
 | :---: | :---: | :--- | :--- |
-| **`I0.0`** | Entrada | Pulsador de Marcha | Inicio de la secuencia de arranque del quemador. |
-| **`I0.1`** | Entrada | Cadena de Paro / Seguridad | Lazo cerrado de presostatos y parada de emergencia. |
-| **`I0.3`** | Entrada | Reset / Parada Temporizada | Enlace con temporizador de seguridad `T101`. |
+| **`I0.0`** | Entrada Física | Pulsador Físico de Marcha | Contacto NA de arranque en campo. |
+| **`V200.0`** | Memoria V (DB1) | Pulsador Virtual de Marcha (App) | En paralelo con `I0.0` para comando remoto por BLE. Auto-reset en scan del PLC. |
+| **`I0.1`** | Entrada Física | Cadena de Paro / Seguridad | Lazo cerrado de presostatos y parada de emergencia (24VDC activa). |
+| **`V200.1`** | Memoria V (DB1) | Pulsador Virtual de Parada (App) | En serie negada (`AN V200.1`) con `I0.1` en Network 2 y en paralelo en Network 3. Auto-reset en scan del PLC. |
+| **`I0.3`** | Entrada Física | Reset / Parada Temporizada | Enlace con temporizador de seguridad `T101`. |
 | **`Q0.0`** | Salida | Contactor Principal de Línea | Alimenta el estator del motor soplador de aire premix. |
-| **`Q0.1`** | Salida | Contactor Estrella ($Y$) | Conexión inicial de baja corriente de arranque. |
+| **`Q0.1`** | Salida | Contactor Estrella ($Y$) / Reposo | Conexión inicial de baja corriente de arranque y piloto de paro. |
 | **`Q0.2`** | Salida | Contactor Delta ($\Delta$) | Marcha plena del ventilador forzado a velocidad nominal. |
 | **`Q0.4`** | Salida | Habilitación de Ignición | Activa el pase a `SBR1` tras completar la prepurga. |
 

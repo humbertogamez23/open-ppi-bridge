@@ -426,6 +426,11 @@ class HmiDashboard extends StatelessWidget {
 
                   const SizedBox(height: 14),
 
+                  // CARD 5: BOTONERA INDUSTRIAL DE CONTROL (MARCHA / PARO APP)
+                  _PulsadorControlCard(bleService: bleService, state: state),
+
+                  const SizedBox(height: 14),
+
                   // BARRA DE MONITOREO CONTINUO
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -458,48 +463,85 @@ class HmiDashboard extends StatelessWidget {
 }
 
 
-class _PulsadorCard extends StatefulWidget {
+class _PulsadorControlCard extends StatefulWidget {
   final BleService bleService;
   final PlcState state;
 
-  const _PulsadorCard({required this.bleService, required this.state});
+  const _PulsadorControlCard({required this.bleService, required this.state});
 
   @override
-  State<_PulsadorCard> createState() => _PulsadorCardState();
+  State<_PulsadorControlCard> createState() => _PulsadorControlCardState();
 }
 
-class _PulsadorCardState extends State<_PulsadorCard> {
-  bool _isPressed = false;
-  bool _useMarker = false; // false = I0.0, true = M0.0
+class _PulsadorControlCardState extends State<_PulsadorControlCard> {
+  bool _startActive = false;
+  bool _stopActive = false;
+  bool _useMarker = false; // false = Memoria V (V200.0 / V200.1), true = Memoria M (M10.0 / M10.1)
 
-  int get targetArea => _useMarker ? PpiProtocol.areaM : PpiProtocol.areaI;
-  String get targetLabel => _useMarker ? "M0.0 (Marca de memoria)" : "I0.0 (Entrada física)";
+  int get targetArea => _useMarker ? PpiProtocol.areaM : PpiProtocol.areaV;
+  int get targetByte => _useMarker ? 10 : 200;
+  String get targetAreaName => _useMarker ? "M (M10.x)" : "V (V200.x) [Recomendado]";
+  String get startAddress => _useMarker ? "M10.0" : "V200.0";
+  String get stopAddress => _useMarker ? "M10.1" : "V200.1";
 
-  Future<void> _sendPress(bool active) async {
-    setState(() => _isPressed = active);
-    await widget.bleService.writeBit(targetArea, 0, 0, active);
+  Future<void> _triggerStart() async {
+    setState(() => _startActive = true);
+    try {
+      // Envia pulso seguro a la memoria (Byte = 1 activa bit .0)
+      bool ok = await widget.bleService.writeByte(targetArea, targetByte, 0x01);
+      await Future.delayed(const Duration(milliseconds: 300));
+      // Reset a 0
+      await widget.bleService.writeByte(targetArea, targetByte, 0x00);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("[-] Error: El PLC no confirmó la orden de Marcha"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } catch (e) {
+      widget.bleService.state.addLog("[-] Excepción Marcha: $e");
+    } finally {
+      if (mounted) setState(() => _startActive = false);
+    }
   }
 
-  Future<void> _sendQuickPulse() async {
-    setState(() => _isPressed = true);
-    await widget.bleService.writeBit(targetArea, 0, 0, true);
-    await Future.delayed(const Duration(milliseconds: 150));
-    await widget.bleService.writeBit(targetArea, 0, 0, false);
-    if (mounted) setState(() => _isPressed = false);
+  Future<void> _triggerStop() async {
+    setState(() => _stopActive = true);
+    try {
+      // Envia pulso seguro a la memoria (Byte = 2 activa bit .1)
+      bool ok = await widget.bleService.writeByte(targetArea, targetByte, 0x02);
+      await Future.delayed(const Duration(milliseconds: 300));
+      // Reset a 0
+      await widget.bleService.writeByte(targetArea, targetByte, 0x00);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("[-] Error: El PLC no confirmó la orden de Parada"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } catch (e) {
+      widget.bleService.state.addLog("[-] Excepción Parada: $e");
+    } finally {
+      if (mounted) setState(() => _stopActive = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isActuallyActive = _isPressed || (!_useMarker && widget.state.inputs[0]);
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF1E262C),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isActuallyActive ? Colors.greenAccent : const Color(0xFF2C3942),
-          width: isActuallyActive ? 2 : 1,
+          color: _startActive
+              ? Colors.greenAccent
+              : (_stopActive ? Colors.redAccent : const Color(0xFF2C3942)),
+          width: (_startActive || _stopActive) ? 2 : 1,
         ),
       ),
       child: Column(
@@ -508,20 +550,17 @@ class _PulsadorCardState extends State<_PulsadorCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+              const Row(
                 children: [
-                  Icon(
-                    Icons.touch_app_rounded,
-                    color: isActuallyActive ? Colors.greenAccent : Colors.cyanAccent,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
+                  Icon(Icons.touch_app_rounded, color: Colors.cyanAccent, size: 20),
+                  SizedBox(width: 8),
                   Text(
-                    "PULSADOR VIRTUAL",
+                    "BOTONERA INDUSTRIAL DE CONTROL",
                     style: TextStyle(
-                      color: isActuallyActive ? Colors.greenAccent : Colors.cyanAccent,
+                      color: Colors.cyanAccent,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
                     ),
                   ),
                 ],
@@ -534,13 +573,13 @@ class _PulsadorCardState extends State<_PulsadorCard> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.black38,
+                    color: Colors.black45,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.5)),
                   ),
                   child: Text(
-                    _useMarker ? "Destino: M0.0" : "Destino: I0.0",
-                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                    targetAreaName,
+                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -548,77 +587,112 @@ class _PulsadorCardState extends State<_PulsadorCard> {
           ),
           const SizedBox(height: 6),
           Text(
-            "Destino actual: $targetLabel",
-            style: const TextStyle(color: Colors.grey, fontSize: 11),
+            "Marcha: $startAddress  |  Parada: $stopAddress (Auto-reset en ciclo de PLC)",
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             children: [
+              // BOTÓN MARCHA (START)
               Expanded(
-                flex: 3,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTapDown: (_) => _sendPress(true),
-                  onTapUp: (_) => _sendPress(false),
-                  onTapCancel: () => _sendPress(false),
+                  onTap: _startActive ? null : _triggerStart,
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 100),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: isActuallyActive
-                            ? [Colors.green[600]!, Colors.green[800]!]
+                        colors: _startActive
+                            ? [Colors.green[500]!, Colors.green[700]!]
                             : [const Color(0xFF2E7D32), const Color(0xFF1B5E20)],
                       ),
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
-                          color: isActuallyActive ? Colors.greenAccent.withValues(alpha: 0.6) : Colors.black45,
-                          blurRadius: isActuallyActive ? 12 : 4,
+                          color: _startActive ? Colors.greenAccent.withValues(alpha: 0.6) : Colors.black45,
+                          blurRadius: _startActive ? 14 : 4,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          isActuallyActive ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                          _startActive ? Icons.check_circle_rounded : Icons.play_arrow_rounded,
                           color: Colors.white,
-                          size: 20,
+                          size: 26,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(height: 4),
                         Text(
-                          isActuallyActive ? "ACTIVO (1)" : "MANTENER PRESIONADO",
+                          _startActive ? "MARCHA (1)" : "MARCHA",
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            letterSpacing: 0.8,
+                            fontSize: 13,
+                            letterSpacing: 1.0,
                           ),
+                        ),
+                        Text(
+                          "Pulso $startAddress",
+                          style: const TextStyle(color: Colors.white70, fontSize: 10),
                         ),
                       ],
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+
+              const SizedBox(width: 14),
+
+              // BOTÓN PARADA (STOP)
               Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF263238),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _stopActive ? null : _triggerStop,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: _stopActive
+                            ? [Colors.red[500]!, Colors.red[800]!]
+                            : [const Color(0xFFC62828), const Color(0xFF8E0000)],
+                      ),
                       borderRadius: BorderRadius.circular(10),
-                      side: const BorderSide(color: Color(0xFF37474F)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _stopActive ? Colors.redAccent.withValues(alpha: 0.6) : Colors.black45,
+                          blurRadius: _stopActive ? 14 : 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ),
-                  onPressed: _sendQuickPulse,
-                  icon: const Icon(Icons.flash_on_rounded, color: Colors.amberAccent, size: 16),
-                  label: const Text(
-                    "PULSO",
-                    style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _stopActive ? Icons.cancel_rounded : Icons.stop_rounded,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _stopActive ? "PARADA (1)" : "PARADA",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        Text(
+                          "Pulso $stopAddress",
+                          style: const TextStyle(color: Colors.white70, fontSize: 10),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
