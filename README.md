@@ -185,7 +185,25 @@ An industrial **Pocket HMI** built with **Flutter** connects wirelessly to the *
 * [x] **Mobile Industrial HMI (Flutter Android APK):** Native pocket HMI for remote monitoring and burner control.
 * [ ] **Gas Burner Sequence Completion (`SBR1`):** Ignition spark electrode, gas solenoid valves, and flame rectification/optical detection.
 * [ ] **Remote Parameter Tuning:** Direct write to $VW$ memory over BLE to adjust purge and ignition timings from the phone.
-* [ ] **Standalone Linux Flasher (`flash_s7_200.py`):** Flash pre-compiled `.bin` / `.awl` blocks directly from Linux terminal with zero Windows/QEMU dependency.
+* [x] **Standalone Linux Flasher (`flash_s7_200.py`):** Flash pre-compiled `.bin` / `.awl` blocks directly from Linux terminal with zero Windows/QEMU dependency.
+
+### 5. Standalone Linux Flashing (Zero Windows / QEMU)
+
+Flash pre-compiled blocks directly over RS-485 (`/dev/ttyUSB0`) or BLE (`/tmp/ttyPPI`):
+
+```bash
+# Flash complete program (System + Program + Data)
+python3 scripts/flash_s7_200.py --port /dev/ttyUSB0 --all
+
+# Flash only OB1 (Program Block logic)
+python3 scripts/flash_s7_200.py --port /dev/ttyUSB0 --program
+
+# Flashing via ESP32-S3 Bluetooth LE
+python3 scripts/flash_s7_200.py --ble --all
+
+# Dry-run protocol simulation test
+python3 scripts/flash_s7_200.py --dry-run --all
+```
 
 ---
 
