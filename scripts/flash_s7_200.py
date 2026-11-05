@@ -102,15 +102,23 @@ class SerialTransport(BaseTransport):
 
     def open(self):
         import serial
-        # 8 data bits, Even parity, 1 stop bit (8E1 estándar PPI)
-        self.ser = serial.Serial(
-            port=self.port,
-            baudrate=self.baud,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_EVEN,
-            stopbits=serial.STOPBITS_ONE,
-            timeout=0.05
-        )
+        try:
+            # 8 data bits, Even parity, 1 stop bit (8E1 estándar PPI físico)
+            self.ser = serial.Serial(
+                port=self.port,
+                baudrate=self.baud,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_EVEN,
+                stopbits=serial.STOPBITS_ONE,
+                timeout=0.05
+            )
+        except Exception:
+            # Puertos virtuales PTY (ej: /tmp/ttyPPI sobre BLE) no soportan paridad en kernel
+            self.ser = serial.Serial(
+                port=self.port,
+                baudrate=self.baud,
+                timeout=0.05
+            )
         self.ser.reset_input_buffer()
         self.ser.reset_output_buffer()
 
@@ -269,12 +277,15 @@ class MockTransport(BaseTransport):
 # ============================================================================
 
 class S7_200_Flasher:
-    def __init__(self, transport: BaseTransport, plc_addr: int = DEFAULT_PLC_ADDR, pc_addr: int = DEFAULT_PC_ADDR):
+    def __init__(self, transport: BaseTransport, plc_addr: int = DEFAULT_PLC_ADDR, pc_addr: int = DEFAULT_PC_ADDR, is_ble: bool = False):
         self.transport = transport
         self.plc_addr = plc_addr
         self.pc_addr = pc_addr
         self.fcb_state = 0  # 0 -> 0x5C, 1 -> 0x7C
         self.seq_counter = 0x0020
+        self.is_ble = is_ble
+        self.ack_timeout = 1.20 if is_ble else 0.15
+        self.poll_timeout = 0.60 if is_ble else 0.15
 
     def next_seq(self) -> int:
         self.seq_counter = (self.seq_counter + 1) & 0x7FFF
@@ -287,36 +298,41 @@ class S7_200_Flasher:
         return fc
 
     def send_raw_sd2_wait_ack(self, pdu: bytes, max_retries: int = 4) -> bool:
-        """Transmite una trama SD2 y espera confirmación inmediata SC (0xE5)."""
+        """Transmite una trama SD2 y espera confirmación inmediata SC (0xE5) o SD1 (0x10)."""
         fc = self.get_fc()
         frame = build_sd2(pdu, fc, self.plc_addr, self.pc_addr)
 
         for attempt in range(max_retries):
-            self.transport.reset_buffers()
+            if attempt == 0:
+                self.transport.reset_buffers()
             self.transport.write(frame)
-            ack = self.transport.read_exact(1, timeout=0.15)
+            ack = self.transport.read_exact(1, timeout=self.ack_timeout)
             if ack == b"\xE5":
                 return True
-            time.sleep(0.05)
+            elif ack == b"\x10":
+                # Trama corta SD1 de confirmación FDL (consumir los 5 bytes restantes)
+                _ = self.transport.read_exact(5, timeout=0.25)
+                return True
+            time.sleep(0.15 if self.is_ble else 0.05)
         return False
 
-    def poll_for_sd2_response(self, timeout: float = 4.0) -> Optional[bytes]:
+    def poll_for_sd2_response(self, timeout: float = 5.0) -> Optional[bytes]:
         """Sondea activamente con SD1 (0x4C) hasta recibir la trama SD2 del PLC."""
         poll = build_sd1(fc=0x4C, plc_addr=self.plc_addr, pc_addr=self.pc_addr)
-        deadline = time.time() + timeout
+        eff_timeout = timeout * 1.5 if self.is_ble else timeout
+        deadline = time.time() + eff_timeout
 
         while time.time() < deadline:
-            self.transport.reset_buffers()
             self.transport.write(poll)
-            resp = self.transport.read_until_frame(timeout=0.15)
+            resp = self.transport.read_until_frame(timeout=self.poll_timeout)
             if resp:
-                if resp == b"\xE5":
-                    # PLC ocupado procesando o borrando memoria
-                    time.sleep(0.04)
+                if resp == b"\xE5" or (len(resp) == 6 and resp[0] == 0x10):
+                    # PLC ocupado procesando o grabando en memoria EEPROM
+                    time.sleep(0.15 if self.is_ble else 0.04)
                     continue
                 if len(resp) >= 6 and resp[0] == 0x68 and resp[-1] == 0x16:
                     return resp
-            time.sleep(0.04)
+            time.sleep(0.08 if self.is_ble else 0.04)
         return None
 
     def execute_s7_transaction(self, pdu: bytes, timeout: float = 4.0) -> Optional[bytes]:
@@ -344,25 +360,34 @@ class S7_200_Flasher:
             try:
                 # Extraer cadena ASCII del nombre de la CPU
                 ascii_part = resp[25:-2].decode("latin1", errors="ignore").strip()
-                return ascii_part
+                if ascii_part:
+                    return ascii_part
             except Exception:
-                return "S7-200 (Online)"
+                pass
+
+        # Fallback para CPUs 214 Rel 00.91 (leer SMB0 para validar enlace online)
+        pdu_smb0 = bytes([
+            0x32, 0x01, 0x00, 0x00, (seq >> 8) & 0xFF, seq & 0xFF, 0x00, 0x0E, 0x00, 0x00,
+            0x04, 0x01, 0x12, 0x0A, 0x10, 0x02, 0x00, 0x01, 0x00, 0x00,
+            0x05, 0x00, 0x00, 0x00
+        ])
+        resp_smb0 = self.execute_s7_transaction(pdu_smb0, timeout=2.0)
+        if resp_smb0 and len(resp_smb0) >= 20:
+            return "Siemens S7-200 CPU 214 (Online)"
         return None
 
     def set_cpu_mode(self, mode: str) -> bool:
         """Pone la CPU en modo STOP o RUN mediante la función 0x29 / 0x28."""
         mode = mode.upper()
+        p_prog = b"P_PROGRAM"
         if mode == "STOP":
-            fc = 0x29
             desc = "STOP (Detener CPU)"
+            param = bytes([0x29, 0x00, 0x00, 0x00, 0x00, 0x00, len(p_prog)]) + p_prog
         elif mode == "RUN":
-            fc = 0x28
             desc = "RUN (Poner en Marcha)"
+            param = bytes([0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFD, 0x00, 0x00, len(p_prog)]) + p_prog
         else:
             raise ValueError(f"Modo inválido: {mode}")
-
-        p_prog = b"P_PROGRAM"
-        param = bytes([fc, 0x00, 0x00, 0x00, 0x00, 0x00, len(p_prog)]) + p_prog
         seq = self.next_seq()
         pdu = bytes([
             0x32, 0x01, 0x00, 0x00, (seq >> 8) & 0xFF, seq & 0xFF,
@@ -588,7 +613,8 @@ def main():
         print(f"[-] Error abriendo transporte ({e}). Verifique permisos o conexión física.")
         sys.exit(1)
 
-    flasher = S7_200_Flasher(transport)
+    is_ble_mode = bool(args.ble or (port and "/tmp/ttyPPI" in port))
+    flasher = S7_200_Flasher(transport, is_ble=is_ble_mode)
 
     try:
         # Consulta de información / Handshake inicial
