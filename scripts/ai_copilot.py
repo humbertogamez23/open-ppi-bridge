@@ -55,6 +55,20 @@ CONOCIMIENTOS TÉCNICOS ESENCIALES:
   * Pulsadores virtuales de la App móvil (V200.0, V200.1) SIEMPRE deben auto-resetearse para evitar comandos pegados por pérdida de enlace BLE.
   * Retención de marcha con contacto auxiliar y parada de emergencia de corte activo (I0.1 con AN o A según contacto físico).
 
+HERRAMIENTAS DISPONIBLES EN EL PROYECTO (open-ppi-bridge):
+- Extraer programa del PLC: `python3 scripts/upload_s7_200.py --ble -o blocks/<nombre>.bin --ai` (o con cable `--port COM3` / `--port /dev/ttyUSB0`).
+- Flashear a EEPROM: `python3 scripts/flash_s7_200.py --ble --block OB1 blocks/<nombre>.bin`
+- Simular scan y lógica: `python3 scripts/simulador_awl.py blocks/<nombre>.awl`
+- Desensamblar/Ensamblar: `python3 scripts/s7_awl_asm.py blocks/<nombre>.bin`
+- Escaneo de estaciones: `python3 scripts/ble_scan_ppi.py` o `python3 scripts/scan_ppi.py`
+- Listar archivos del repo: `ls -lh blocks/` o `ls -lh scripts/`
+
+CAPACIDAD DE EJECUCIÓN:
+Cuando el usuario te pida realizar una tarea concreta del sistema (como extraer el programa del PLC, simular lógica, flashear o listar archivos), describe brevemente lo que harás y coloca al final de tu respuesta una línea exacta con el formato:
+COMANDO: <comando bash a ejecutar>
+Ejemplo:
+COMANDO: python3 scripts/upload_s7_200.py --ble -o blocks/OB1_extraido.bin --ai
+
 TUS RESPUESTAS:
 - Deben ser concisas, altamente técnicas, precisas y en español profesional.
 - En generación de código, entrega código AWL bien estructurado con comentarios por Red (Network).
@@ -181,7 +195,33 @@ def interactive_chat(model: str = DEFAULT_MODEL):
             print("\n🤖 Copiloto (pensando)...")
             answer = query_ollama(user_input, model=model)
             if answer:
-                print(f"\n{answer}")
+                lines = answer.splitlines()
+                cmd_to_run = None
+                display_lines = []
+                for line in lines:
+                    if line.strip().startswith("COMANDO:"):
+                        cmd_to_run = line.strip().replace("COMANDO:", "").strip()
+                    else:
+                        display_lines.append(line)
+
+                cleaned_msg = "\n".join(display_lines).strip()
+                if cleaned_msg:
+                    print(f"\n{cleaned_msg}")
+
+                if cmd_to_run:
+                    print(f"\n⚡ Propuesta de acción en tu sistema:")
+                    print(f"   \033[1;36m{cmd_to_run}\033[0m")
+                    try:
+                        confirm = input("\n¿Deseas ejecutar este comando ahora? [s/N]: ").strip().lower()
+                    except (KeyboardInterrupt, EOFError):
+                        print("\n[*] Acción cancelada.")
+                        continue
+                    if confirm in ("s", "si", "y", "yes"):
+                        print(f"\n[*] Ejecutando: {cmd_to_run}\n" + "-" * 60)
+                        os.system(cmd_to_run)
+                        print("-" * 60 + "\n[✓] Comando completado.")
+                    else:
+                        print("[*] Comando cancelado por el usuario.")
             else:
                 print("[-] No se recibió respuesta del modelo local.")
 
