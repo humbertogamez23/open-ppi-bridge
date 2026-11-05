@@ -262,6 +262,14 @@ class S7_200_SerialUploader:
         print(f"📥 INICIANDO EXTRACCIÓN (UPLOAD): {desc}")
         print(f"{'='*70}")
 
+        # 0. Negociación de PDU (0xF0 - 240B)
+        print(f"[*] Negociando canal de comunicación S7comm (PDU 240B)...")
+        pdu_init = bytes([
+            0x32, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00,
+            0xF0, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0xF0
+        ])
+        _ = self.execute_s7_transaction(pdu_init, timeout=2.0)
+
         # 1. Start Upload (0x1D)
         seq = self.next_seq()
         param_1d = bytes([0x1D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, len(name)]) + name
@@ -372,16 +380,16 @@ async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_A
         ack = False
         eff_fc = current_fc
 
-        for _ in range(4):
+        for _ in range(6):
             frame = build_sd2(pdu, eff_fc, plc_addr=plc_addr, pc_addr=pc_addr)
             while not rx_q.empty():
                 rx_q.get_nowait()
             await client.write_gatt_char(BLE_RX_UUID, frame, response=False)
 
             t0 = time.time()
-            while time.time() - t0 < 0.6:
+            while time.time() - t0 < 0.8:
                 try:
-                    r = await asyncio.wait_for(rx_q.get(), timeout=0.2)
+                    r = await asyncio.wait_for(rx_q.get(), timeout=0.25)
                     if r and (b"\xE5" in r or r == b"\xE5"):
                         ack = True
                         break
@@ -392,7 +400,7 @@ async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_A
                 break
             # Auto-sincronizar FCB
             eff_fc ^= 0x20
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.06)
 
         if not ack:
             print(f"[-] No se recibió ACK del autómata tras alternar FCB.")
@@ -419,6 +427,16 @@ async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_A
         return bytes(accum) if accum else None
 
     try:
+        # 0. Negociación inicial de PDU (0xF0 - 240B)
+        print(f"[*] Negociando canal de comunicación S7comm (PDU 240B)...")
+        pdu_init = bytes([
+            0x32, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00,
+            0xF0, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0xF0
+        ])
+        resp_pdu = await trans(pdu_init)
+        if not resp_pdu:
+            print(f"[-] Advertencia: Sin confirmación explícita de PDU. Continuando...")
+
         # 1. Start Upload (0x1D)
         seq = 0x0040
         print(f"[*] Enviando solicitud Start Upload (0x1D) para {name.decode()}...")
@@ -428,6 +446,10 @@ async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_A
         resp_start = await trans(pdu_1d)
         if not resp_start or len(resp_start) < 20:
             print(f"[X] Falló la solicitud Start Upload. Sin respuesta de la CPU.")
+            print(f"    Diagnóstico recomendado:")
+            print(f"    1. Polaridad RS-485: Verifique que Pin 3 del DB9 sea B (RxTx+) y Pin 8 sea A (RxTx-).")
+            print(f"    2. Velocidad en baudios: Si la CPU 222 está configurada a 19200 baudios, no responderá a 9600.")
+            print(f"    3. Selector RUN/STOP: Si el puerto está en modo Freeport, mueva la llave física a STOP.")
             return None
 
         upload_id = resp_start[26]
