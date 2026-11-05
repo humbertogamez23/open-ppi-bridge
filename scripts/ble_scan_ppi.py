@@ -87,6 +87,15 @@ class BlePpiScanner:
                 print("=" * 65)
 
         except Exception as e:
+            try:
+                from bleak.exc import BleakDeviceNotFoundError
+                if isinstance(e, BleakDeviceNotFoundError):
+                    print(f"\n[X] Dispositivo no encontrado: No se localizó la pasarela ESP32 ({self.target_address}).")
+                    print("    - Verifique que la placa ESP32-S3 esté conectada y encendida.")
+                    print("    - Asegúrese de que el Bluetooth de su ordenador esté activado y dentro del alcance.")
+                    return
+            except Exception:
+                pass
             print(f"[-] Error de conexión Bluetooth: {e}")
 
 def main():

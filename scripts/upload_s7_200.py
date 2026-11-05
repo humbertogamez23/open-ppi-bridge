@@ -324,7 +324,12 @@ class S7_200_SerialUploader:
 # ============================================================================
 
 async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_ADDR, pc_addr: int = DEFAULT_PC_ADDR) -> Optional[bytes]:
-    from bleak import BleakClient
+    try:
+        from bleak import BleakClient
+        from bleak.exc import BleakDeviceNotFoundError, BleakError
+    except ImportError:
+        print("[-] Error: 'bleak' no está instalado. Instálelo con: pip install bleak")
+        return None
 
     cfg = BLOCK_CONFIG.get(block_key.upper())
     if not cfg:
@@ -339,8 +344,22 @@ async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_A
     print(f"{'='*70}")
     print(f"[*] Conectando vía Bluetooth LE a pasarela ESP32 ({mac})...")
 
-    client = BleakClient(mac, timeout=12.0)
-    await client.connect()
+    client = BleakClient(mac, timeout=10.0)
+    try:
+        await client.connect()
+    except BleakDeviceNotFoundError:
+        print(f"\n[X] Dispositivo no encontrado: No se pudo localizar la pasarela ESP32 ({mac}).")
+        print("    - Verifique que la pasarela ESP32-S3 esté alimentada y encendida.")
+        print("    - Asegúrese de que el Bluetooth de su ordenador esté activado.")
+        print("    - Compruebe que esté dentro del alcance de cobertura inalámbrica.")
+        return None
+    except (BleakError, asyncio.TimeoutError) as e:
+        print(f"\n[X] Error de conexión Bluetooth LE: {e}")
+        return None
+    except Exception as e:
+        print(f"\n[X] Error inesperado en enlace BLE: {e}")
+        return None
+
     print("[✓] Conexión Bluetooth LE establecida con éxito.")
 
     rx_q = asyncio.Queue()
@@ -457,8 +476,12 @@ async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_A
         return bytes(accumulated_data)
 
     finally:
-        await client.disconnect()
-        print("[*] Desconectado del enlace Bluetooth.")
+        if client and client.is_connected:
+            try:
+                await client.disconnect()
+                print("[*] Desconectado del enlace Bluetooth.")
+            except Exception:
+                pass
 
 
 # ============================================================================

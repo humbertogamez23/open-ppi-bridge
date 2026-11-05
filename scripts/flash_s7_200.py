@@ -188,14 +188,25 @@ class BleTransport(BaseTransport):
         return self.loop
 
     def open(self):
-        from bleak import BleakClient
+        try:
+            from bleak import BleakClient
+            from bleak.exc import BleakDeviceNotFoundError, BleakError
+        except ImportError:
+            raise RuntimeError("'bleak' no está instalado. Instálelo con: pip install bleak")
+
         loop = self._get_loop()
         self.rx_queue = asyncio.Queue()
 
         async def _connect():
             print(f"[*] Conectando vía Bluetooth LE a pasarela ESP32 ({self.target_address})...")
-            self.client = BleakClient(self.target_address, timeout=12.0)
-            await self.client.connect()
+            self.client = BleakClient(self.target_address, timeout=10.0)
+            try:
+                await self.client.connect()
+            except BleakDeviceNotFoundError:
+                raise ConnectionError(f"Dispositivo no encontrado: No se localizó la pasarela ESP32 ({self.target_address}). Verifique que esté encendida y dentro del alcance.")
+            except (BleakError, asyncio.TimeoutError) as e:
+                raise ConnectionError(f"Fallo al conectar por Bluetooth LE ({e}).")
+
             print(f"[✓] Enlace Bluetooth LE establecido con éxito.")
 
             def _notify_handler(sender, data: bytearray):
