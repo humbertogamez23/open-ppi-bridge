@@ -50,7 +50,7 @@ BLOCK_CONFIG = {
 
 DEFAULT_PLC_ADDR = 2
 DEFAULT_PC_ADDR = 0
-DEFAULT_SERIAL = "/dev/ttyUSB0"
+DEFAULT_SERIAL = "COM3" if sys.platform.startswith("win") else "/dev/ttyUSB0"
 DEFAULT_BAUD = 9600
 DEFAULT_BLE_MAC = "28:84:85:91:45:06"
 BLE_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"  # Host -> ESP32
@@ -167,6 +167,103 @@ class SerialTransport(BaseTransport):
                             return bytes(buf[:total_len])
             else:
                 time.sleep(0.005)
+        return bytes(buf) if buf else None
+
+
+class BleTransport(BaseTransport):
+    """Transporte Bluetooth LE directo con Bleak (Windows 11 / Linux nativo)."""
+    def __init__(self, target_address: str = DEFAULT_BLE_MAC):
+        self.target_address = target_address
+        self.client = None
+        self.rx_queue = None
+        self.loop = None
+
+    def _get_loop(self):
+        if self.loop is None:
+            try:
+                self.loop = asyncio.get_event_loop()
+            except RuntimeError:
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
+        return self.loop
+
+    def open(self):
+        from bleak import BleakClient
+        loop = self._get_loop()
+        self.rx_queue = asyncio.Queue()
+
+        async def _connect():
+            print(f"[*] Conectando vía Bluetooth LE a pasarela ESP32 ({self.target_address})...")
+            self.client = BleakClient(self.target_address, timeout=12.0)
+            await self.client.connect()
+            print(f"[✓] Enlace Bluetooth LE establecido con éxito.")
+
+            def _notify_handler(sender, data: bytearray):
+                self.rx_queue.put_nowait(bytes(data))
+
+            await self.client.start_notify(BLE_TX_UUID, _notify_handler)
+
+        loop.run_until_complete(_connect())
+
+    def close(self):
+        if self.client and self.client.is_connected:
+            loop = self._get_loop()
+            loop.run_until_complete(self.client.disconnect())
+            print("[*] Enlace Bluetooth desconectado.")
+
+    def write(self, data: bytes):
+        loop = self._get_loop()
+        loop.run_until_complete(self.client.write_gatt_char(BLE_RX_UUID, data, response=False))
+
+    def reset_buffers(self):
+        while not self.rx_queue.empty():
+            try:
+                self.rx_queue.get_nowait()
+            except Exception:
+                break
+
+    def read_exact(self, count: int, timeout: float) -> bytes:
+        deadline = time.time() + timeout
+        buf = bytearray()
+        loop = self._get_loop()
+
+        while time.time() < deadline and len(buf) < count:
+            t_rem = max(0.01, deadline - time.time())
+            try:
+                async def _get_chunk():
+                    return await asyncio.wait_for(self.rx_queue.get(), timeout=min(0.2, t_rem))
+                chunk = loop.run_until_complete(_get_chunk())
+                if chunk:
+                    buf.extend(chunk)
+            except Exception:
+                pass
+        return bytes(buf)
+
+    def read_until_frame(self, timeout: float) -> Optional[bytes]:
+        deadline = time.time() + timeout
+        buf = bytearray()
+        loop = self._get_loop()
+
+        while time.time() < deadline:
+            t_rem = max(0.01, deadline - time.time())
+            try:
+                async def _get_chunk():
+                    return await asyncio.wait_for(self.rx_queue.get(), timeout=min(0.2, t_rem))
+                chunk = loop.run_until_complete(_get_chunk())
+                if chunk:
+                    for b in chunk:
+                        if b == 0xE5 and len(buf) == 0:
+                            return b"\xE5"
+                        buf.append(b)
+                        if buf[0] == 0x10 and len(buf) >= 6:
+                            if buf[5] == 0x16:
+                                return bytes(buf[:6])
+                        elif buf[0] == 0x68 and len(buf) >= 6:
+                            expected_len = buf[1] + 6
+                            if len(buf) >= expected_len and buf[expected_len - 1] == 0x16:
+                                return bytes(buf[:expected_len])
+            except Exception:
+                pass
         return bytes(buf) if buf else None
 
 
@@ -589,19 +686,16 @@ def main():
         sys.exit(1)
 
     # 1. Configurar Transporte
+    is_ble_mode = False
     if args.dry_run:
         transport = MockTransport()
     elif args.ble:
-        print("[!] Modo BLE directo requiere el puente ble_serial_bridge.py o /tmp/ttyPPI.")
-        port = "/tmp/ttyPPI"
-        if not os.path.exists(port):
-            print(f"[-] No se encontró el puerto virtual {port}.")
-            print("    Ejecute primero en otra terminal: python3 scripts/ble_serial_bridge.py")
-            sys.exit(1)
-        transport = SerialTransport(port=port, baud=args.baud)
+        is_ble_mode = True
+        transport = BleTransport(target_address=args.mac)
     else:
         port = args.port or auto_detect_serial()
         transport = SerialTransport(port=port, baud=args.baud)
+        is_ble_mode = bool(port and "/tmp/ttyPPI" in port)
 
     print(f"\n========================================================")
     print(f"🚀 open-ppi-bridge - Flasher Autónomo Siemens S7-200")
@@ -613,7 +707,6 @@ def main():
         print(f"[-] Error abriendo transporte ({e}). Verifique permisos o conexión física.")
         sys.exit(1)
 
-    is_ble_mode = bool(args.ble or (port and "/tmp/ttyPPI" in port))
     flasher = S7_200_Flasher(transport, is_ble=is_ble_mode)
 
     try:

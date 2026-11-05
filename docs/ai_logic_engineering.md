@@ -48,7 +48,12 @@ flowchart TD
 
 ## 🛠️ Herramientas Integradas en la Suite
 
-### 1. Desensamblador y Ensamblador Nativo (`scripts/s7_awl_asm.py`)
+### 1. Extractor Autónomo y Remoto BLE (`scripts/upload_s7_200.py`)
+Permite extraer de forma inalámbrica (Bluetooth LE vía ESP32-S3) o por cable RS-485 (Windows `COMx` o Linux `/dev/ttyUSB0`) el programa actualmente grabado en la memoria del autómata:
+* **Secuencia S7comm de Upload:** Negocia el búfer PDU de 240 bytes, envía `0x1D` (*Start Upload*), obtiene el Session ID dinámico del PLC, recupera en chunks segmentados (`0x1E`) todo el bytecode binario y cierra limpiamente con `0x1F` (*End Upload*).
+* **Desensamblado Automático Integrado:** Al recibir el bloque, invoca internamente el desensamblador para generar de inmediato el código fuente `.awl` editable y legible por humanos o agentes de IA.
+
+### 2. Desensamblador y Ensamblador Nativo (`scripts/s7_awl_asm.py`)
 Permite decodificar bloques binarios descargados de la CPU o generados por Micro/WIN (`FB 70 70`) hacia texto plano mnemónico AWL/STL y viceversa.
 * **Inspección de Encabezados:** Extrae metadatos de tipo de bloque (OB1, SDB, DB1), longitudes de código, offsets y contador de redes.
 * **Reconocimiento de Opcodes:** Soporta instrucciones complejas de control de flujo (`CALL SBR_n`, `RET`, `ED D6`), operaciones de carga/movimiento de memoria (`MOVB`, `MOVW` sobre `AC`, `VW`, `SMB`), comparadores (`LDW<=`, `LDW>=`) y temporizadores (`TON`).

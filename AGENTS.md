@@ -33,15 +33,17 @@ Para que puedas guiar al usuario de forma precisa y sin errores:
 
 ## 🧠 Herramientas Autónomas de Lógica y Flasheo para el Agente
 
-Como asistente de IA (Antigravity AI u homólogo), dispones de un conjunto de herramientas en el directorio `scripts/` para asistir activamente al desarrollador en el ciclo de vida del software del PLC sin requerir software propietario:
+Como asistente de IA (Antigravity AI u homólogo), dispones de un conjunto de herramientas en el directorio `scripts/` para asistir activamente al desarrollador en el ciclo de vida del software del PLC sin requerir software propietario (100% multiplataforma en Linux y Windows 11):
 
-1. **Desensamblado y Ensamblado de Bloques AWL (`scripts/s7_awl_asm.py`):**
+1. **Extracción Directa de Bloques (`scripts/upload_s7_200.py`):**
+   - Utilízalo para extraer el programa que está grabado dentro de la memoria física del PLC vía RS-485 (`--port COM3` o `/dev/ttyUSB0`) o inalámbricamente vía Bluetooth LE (`--ble`). Utiliza la secuencia S7comm `0x1D` (Start Upload), `0x1E` (Upload Chunks) y `0x1F` (End Upload), y desensambla automáticamente el bytecode binario a código fuente AWL legible.
+2. **Desensamblado y Ensamblado de Bloques AWL (`scripts/s7_awl_asm.py`):**
    - Utilízalo para examinar el bytecode de bloques compilados (`.bin`), extraer las redes mnemónicas AWL o ensamblar nuevas secuencias.
-2. **Simulación de Scan y Validación de Seguridad (`scripts/simulador_awl.py`):**
+3. **Simulación de Scan y Validación de Seguridad (`scripts/simulador_awl.py`):**
    - Cuando el usuario solicite cambios en la lógica (ej: secuencias de ignición en `SBR1`, interbloqueos de gas o ajustes de temporizadores con potenciómetros analógicos `SMB28`/`SMB29`), simula el ciclo de scan para verificar que no existan condiciones de carrera ni bloqueos antes de recomendar o flashear el código.
-3. **Generación de Diagramas Ladder (`scripts/generate_ladder_diagram.py`):**
+4. **Generación de Diagramas Ladder (`scripts/generate_ladder_diagram.py`):**
    - Genera diagramas de contactos (KOP) en Mermaid / Markdown para que el usuario pueda visualizar la lógica intuitivamente.
-4. **Flasheo Directo a la EEPROM (`scripts/flash_s7_200.py`):**
-   - Puedes guiar o ejecutar el flasheo directo vía RS-485 (`--port /dev/ttyUSB0`) o de forma inalámbrica vía Bluetooth Low Energy (`--ble`). El flasheo borra (`_DELE`), crea (`_CREA`), transfiere en chunks FDL con alternancia de FCB (`0x5C`/`0x7C`), cierra (`_ENDB`), commitea a EEPROM, activa el bloque (`_INSE`) y conmuta la CPU a modo RUN en segundos.
+5. **Flasheo Directo a la EEPROM (`scripts/flash_s7_200.py`):**
+   - Puedes guiar o ejecutar el flasheo directo vía RS-485 (`--port COM3` o `/dev/ttyUSB0`) o de forma inalámbrica vía Bluetooth Low Energy (`--ble`). El flasheo borra (`_DELE`), crea (`_CREA`), transfiere en chunks FDL con alternancia de FCB (`0x5C`/`0x7C`), cierra (`_ENDB`), commitea a EEPROM, activa el bloque (`_INSE`) y conmuta la CPU a modo RUN en segundos.
 
 Consulta la guía técnica detallada en [`docs/ai_logic_engineering.md`](docs/ai_logic_engineering.md).
