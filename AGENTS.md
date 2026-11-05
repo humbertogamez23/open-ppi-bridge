@@ -45,5 +45,7 @@ Como asistente de IA (Antigravity AI u homólogo), dispones de un conjunto de he
    - Genera diagramas de contactos (KOP) en Mermaid / Markdown para que el usuario pueda visualizar la lógica intuitivamente.
 5. **Flasheo Directo a la EEPROM (`scripts/flash_s7_200.py`):**
    - Puedes guiar o ejecutar el flasheo directo vía RS-485 (`--port COM3` o `/dev/ttyUSB0`) o de forma inalámbrica vía Bluetooth Low Energy (`--ble`). El flasheo borra (`_DELE`), crea (`_CREA`), transfiere en chunks FDL con alternancia de FCB (`0x5C`/`0x7C`), cierra (`_ENDB`), commitea a EEPROM, activa el bloque (`_INSE`) y conmuta la CPU a modo RUN en segundos.
+6. **Copiloto de IA Local y Offline (`scripts/ai_copilot.py`):**
+   - Asistente de inteligencia artificial que opera 100% desconectado (air-gapped) en la laptop del usuario mediante Qwen 2.5 Coder (1.5B) sobre Ollama (~1.3 GB RAM). Permite auditar seguridad (`--audit archivo.awl`), explicar redes paso a paso (`--explain archivo.awl`), generar código AWL desde lenguaje natural (`--generate "descripción"`) o chatear interactivamente (`--chat`). Se integra nativamente con `upload_s7_200.py --ai`.
 
 Consulta la guía técnica detallada en [`docs/ai_logic_engineering.md`](docs/ai_logic_engineering.md).

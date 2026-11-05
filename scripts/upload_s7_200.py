@@ -488,6 +488,7 @@ def main():
     parser.add_argument("--block", choices=["OB1", "DB1", "SDB"], default="OB1", help="Bloque a extraer (default: OB1)")
     parser.add_argument("-o", "--output", default=None, help="Ruta para guardar el archivo binario (.bin)")
     parser.add_argument("--awl", default=None, nargs="?", const="", help="Desensamblar y exportar automáticamente a archivo AWL/STL")
+    parser.add_argument("--ai", action="store_true", help="Auditar y analizar la lógica extraída con el copiloto de IA local (Qwen 2.5 Coder)")
 
     args = parser.parse_args()
 
@@ -550,6 +551,18 @@ def main():
             if len(awl_text.splitlines()) > 30:
                 print(f"  ... ({len(awl_text.splitlines()) - 30} líneas más en el archivo)")
             print("=" * 65)
+
+            if args.ai:
+                try:
+                    from ai_copilot import audit_awl_code
+                    print("\n" + "=" * 65)
+                    print("🤖 AUDITORÍA DE SEGURIDAD CON IA LOCAL (Qwen 2.5 Coder):")
+                    print("=" * 65)
+                    ai_report = audit_awl_code(awl_text)
+                    print(ai_report)
+                    print("=" * 65)
+                except Exception as e:
+                    print(f"[!] Nota: No se pudo ejecutar el análisis de IA ({e})")
         except Exception as e:
             print(f"[!] Nota: No se pudo desensamblar a AWL ({e}), pero el binario está intacto.")
 

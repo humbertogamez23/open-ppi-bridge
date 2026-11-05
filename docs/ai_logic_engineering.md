@@ -58,17 +58,17 @@ Permite decodificar bloques binarios descargados de la CPU o generados por Micro
 * **Inspección de Encabezados:** Extrae metadatos de tipo de bloque (OB1, SDB, DB1), longitudes de código, offsets y contador de redes.
 * **Reconocimiento de Opcodes:** Soporta instrucciones complejas de control de flujo (`CALL SBR_n`, `RET`, `ED D6`), operaciones de carga/movimiento de memoria (`MOVB`, `MOVW` sobre `AC`, `VW`, `SMB`), comparadores (`LDW<=`, `LDW>=`) y temporizadores (`TON`).
 
-### 2. Simulador de Scan y Condiciones de Carrera (`scripts/simulador_awl.py`)
+### 3. Simulador de Scan y Condiciones de Carrera (`scripts/simulador_awl.py`)
 Antes de transferir un bloque a un autómata físico conectado a actuadores reales (como motores sopladores, electrodos de chispa o electroválvulas de gas), el simulador reproduce fielmente el ciclo de scan del autómata:
 * **Lectura de imagen de entradas ($I$):** Simulación de pulsadores físicos y enclavamientos.
 * **Gestión de memoria de variables ($V$):** Validación del auto-reset de bits virtuales (`V200.0`, `V200.1`) provenientes de la HMI móvil para evitar enclavamientos indeseados ante pérdida de señal Bluetooth.
 * **Resolución de temporizadores industriales:** Emulación de base de tiempo de 100ms para temporizadores estrella-triángulo (`T37`) y purga previa (`T63`).
 * **Detección temprana de errores:** Evita el destructivo error S7comm `0xD230` (*Structural error in block*) o `0xD240` (*Internal coordination rules violated*).
 
-### 3. Generador de Diagramas de Contactos (`scripts/generate_ladder_diagram.py`)
+### 4. Generador de Diagramas de Contactos (`scripts/generate_ladder_diagram.py`)
 Convierte automáticamente la estructura de instrucciones mnemónicas AWL en esquemas visuales de diagrama de contactos (Ladder / KOP) renderizables directamente en plataformas como GitHub, Obsidian o herramientas de soporte técnico.
 
-### 4. Flasheador Headless y Remoto BLE (`scripts/flash_s7_200.py`)
+### 5. Flasheador Headless y Remoto BLE (`scripts/flash_s7_200.py`)
 La culminación del flujo de ingeniería: una herramienta de línea de comandos en Linux que ejecuta la secuencia completa de flasheo industrial mediante protocolo PPI/S7comm:
 1. Conexión y lectura del bloque de estado del PLC.
 2. Cambio seguro a modo **STOP** (`FC=0x29`).
@@ -78,6 +78,13 @@ La culminación del flujo de ingeniería: una herramienta de línea de comandos 
 6. Cierre de bloque (`_ENDB`) y confirmación de commit en EEPROM (`10 00 02 02 04 16`).
 7. Inserción lógica (`_INSE`) y retorno automático a modo **RUN** con cabecera extendida de 11 bytes.
 * **Velocidad:** Flasheo completo de un bloque OB1 en **0.9 segundos por cable RS-485** o en **3.2 segundos vía inalámbrica Bluetooth Low Energy**.
+
+### 6. Copiloto de IA Local y Offline (`scripts/ai_copilot.py`)
+Asistente de inteligencia artificial que opera 100% desconectado (*air-gapped*) dentro de la laptop del ingeniero mediante Qwen 2.5 Coder (1.5B) corriendo sobre Ollama (~1.3 GB de RAM):
+* **Auditoría de Seguridad (`--audit`):** Inspecciona redes AWL en busca de interbloqueos ausentes entre salidas críticas (estrella/delta, electroválvulas de gas), lazos abiertos o bits de control remoto no liberados.
+* **Explicador Técnico (`--explain`):** Traduce automáticamente el código mnemónico a informes comprensibles para personal de mantenimiento de planta.
+* **Generador de Lógica (`--generate`):** Convierte especificaciones en lenguaje natural a código AWL nativo Siemens, compatible con el ensamblador `s7_awl_asm.py`.
+* **Integración con Extractor:** Invócalo automáticamente tras una extracción en vivo mediante `python3 scripts/upload_s7_200.py --ble --ai`.
 
 ---
 
