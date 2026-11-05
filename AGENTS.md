@@ -28,3 +28,20 @@ Para que puedas guiar al usuario de forma precisa y sin errores:
 - **Regla de Memoria V en S7comm:** La memoria variable ($V$, ej: `V200.0`, `VB200`, `VW100`) se direcciona estrictamente como **DB1** (`dbNumber = 0x0001`, área `0x84`). Intentar direccionarla como DB0 provocará el rechazo inmediato del PLC con código de error `0x03` (*Accessing the object not allowed*).
 - **Escrituras Seguras en PLC:** Los pulsadores de la app móvil escriben por byte (`VB200 = 1` para Marcha, `VB200 = 2` para Parada) y en el programa AWL del PLC la Red 9 ejecuta un auto-reset por ciclo de scan (`R V200.0, 1; R V200.1, 1`), garantizando seguridad ante desconexiones accidentales.
 - **Detección de Modo de CPU:** `SMB0` bit 0 (`SM0.0`) es *Always-ON* en Siemens S7-200. Para determinar la posición real del selector de modo de la CPU debe evaluarse `SM0.7` (1 = RUN, 0 = TERM / STOP).
+
+---
+
+## 🧠 Herramientas Autónomas de Lógica y Flasheo para el Agente
+
+Como asistente de IA (Antigravity AI u homólogo), dispones de un conjunto de herramientas en el directorio `scripts/` para asistir activamente al desarrollador en el ciclo de vida del software del PLC sin requerir software propietario:
+
+1. **Desensamblado y Ensamblado de Bloques AWL (`scripts/s7_awl_asm.py`):**
+   - Utilízalo para examinar el bytecode de bloques compilados (`.bin`), extraer las redes mnemónicas AWL o ensamblar nuevas secuencias.
+2. **Simulación de Scan y Validación de Seguridad (`scripts/simulador_awl.py`):**
+   - Cuando el usuario solicite cambios en la lógica (ej: secuencias de ignición en `SBR1`, interbloqueos de gas o ajustes de temporizadores con potenciómetros analógicos `SMB28`/`SMB29`), simula el ciclo de scan para verificar que no existan condiciones de carrera ni bloqueos antes de recomendar o flashear el código.
+3. **Generación de Diagramas Ladder (`scripts/generate_ladder_diagram.py`):**
+   - Genera diagramas de contactos (KOP) en Mermaid / Markdown para que el usuario pueda visualizar la lógica intuitivamente.
+4. **Flasheo Directo a la EEPROM (`scripts/flash_s7_200.py`):**
+   - Puedes guiar o ejecutar el flasheo directo vía RS-485 (`--port /dev/ttyUSB0`) o de forma inalámbrica vía Bluetooth Low Energy (`--ble`). El flasheo borra (`_DELE`), crea (`_CREA`), transfiere en chunks FDL con alternancia de FCB (`0x5C`/`0x7C`), cierra (`_ENDB`), commitea a EEPROM, activa el bloque (`_INSE`) y conmuta la CPU a modo RUN en segundos.
+
+Consulta la guía técnica detallada en [`docs/ai_logic_engineering.md`](docs/ai_logic_engineering.md).

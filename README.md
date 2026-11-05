@@ -59,6 +59,7 @@ flowchart LR
 * **Strict FCB Bit Alternation:** Guards against redundant toggling, guaranteeing sequential alternation between `0x5C` and `0x7C` across code chunks.
 * **Instant `_ENDB` Completion:** Instantly finalizes block transfers upon link ACK (`0xE5`), allowing sub-10ms dispatch of the block activation command (`_INSE`) before Micro/WIN's 3-second driver watchdog trips.
 * **Standalone Linux CLI Suite:** Read inputs/outputs, monitor memory, scan station addresses, and toggle RUN/STOP without launching Windows or Micro/WIN.
+* **AI-Assisted PLC Logic Engineering Suite:** End-to-end toolchain for AWL/STL disassembly, scan-cycle simulation, Mermaid ladder diagram generation, and direct headless/BLE flashing with Antigravity AI.
 
 ---
 
@@ -204,6 +205,25 @@ python3 scripts/flash_s7_200.py --ble --all
 # Dry-run protocol simulation test
 python3 scripts/flash_s7_200.py --dry-run --all
 ```
+
+---
+
+## 🤖 AI-Assisted PLC Logic Engineering Suite (Antigravity AI)
+
+`open-ppi-bridge` goes beyond physical and serial protocol bridging by providing a complete, autonomous development ecosystem co-developed with **Antigravity AI (Google DeepMind)**. It enables engineers to write, reverse-engineer, simulate, and flash S7-200 automation logic without proprietary Windows tools:
+
+* **Native AWL/STL Assembler & Disassembler ([`scripts/s7_awl_asm.py`](scripts/s7_awl_asm.py)):**
+  Parses binary S7-200 program blocks (`FB 70 70`), extracts subroutines/networks, and compiles human-readable Statement List (AWL) directly into PLC bytecode.
+* **Deterministic Scan-Cycle Simulator ([`scripts/simulador_awl.py`](scripts/simulador_awl.py)):**
+  Emulates the micro-PLC execution cycle, evaluating digital inputs ($I$), timers ($T$), accumulators ($AC0$, $AC1$), analog potentiometers ($SMB28$, $SMB29$), and variable memory ($V$, $M$, $Q$). Catches timing hazards and interlocks before touching live machinery.
+* **Automated Ladder Diagram Generator ([`scripts/generate_ladder_diagram.py`](scripts/generate_ladder_diagram.py)):**
+  Translates logic into clean, visual contact ladder diagrams (KOP) in Markdown and Mermaid syntax.
+* **Direct RS-485 & Wireless BLE Flasher ([`scripts/flash_s7_200.py`](scripts/flash_s7_200.py)):**
+  Flashes logic blocks into the physical S7-200 EEPROM in **0.9s via wired RS-485** or **3.2s via BLE (ESP32-S3)**.
+* **AI Pair Programming Copilot:**
+  Engineers can collaborate interactively with Antigravity AI to design safety interlocks (NFPA 85 / EN 676), implement complex burner sequences, and debug live telemetry packets captured with [`scripts/sniffer_live.py`](scripts/sniffer_live.py).
+
+👉 **Read the complete guide:** [`docs/ai_logic_engineering.md`](docs/ai_logic_engineering.md)
 
 ---
 
