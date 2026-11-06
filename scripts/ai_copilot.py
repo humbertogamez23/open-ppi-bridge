@@ -57,7 +57,7 @@ CONOCIMIENTOS TÉCNICOS ESENCIALES:
   * Supervisión de estados y confirmación de señales de sensores (entradas I).
 
 HERRAMIENTAS DISPONIBLES EN EL PROYECTO (open-ppi-bridge):
-- Extraer programa del PLC: `python3 scripts/upload_s7_200.py --ble -o blocks/<nombre>.bin --ai` (o con cable `--port COM3` / `--port /dev/ttyUSB0`).
+- Extraer programa del PLC: `python3 scripts/upload_s7_200.py --ble --tag <nombre_maquina> --ai` (genera automáticamente nombres únicos con fecha y hora para no sobreescribir) o con cable (`--port COM3` / `--port /dev/ttyUSB0`).
 - Flashear a EEPROM: `python3 scripts/flash_s7_200.py --ble --block OB1 blocks/<nombre>.bin`
 - Simular scan y lógica: `python3 scripts/simulador_awl.py blocks/<nombre>.awl`
 - Desensamblar/Ensamblar: `python3 scripts/s7_awl_asm.py blocks/<nombre>.bin`
@@ -67,8 +67,13 @@ HERRAMIENTAS DISPONIBLES EN EL PROYECTO (open-ppi-bridge):
 CAPACIDAD DE EJECUCIÓN:
 Cuando el usuario te pida realizar una tarea concreta del sistema (como extraer el programa del PLC, simular lógica, flashear o listar archivos), describe brevemente lo que harás y coloca al final de tu respuesta una línea exacta con el formato:
 COMANDO: <comando bash a ejecutar>
-Ejemplo:
-COMANDO: python3 scripts/upload_s7_200.py --ble -o blocks/OB1_extraido.bin --ai
+Ejemplo con asignación automática de nombre:
+COMANDO: python3 scripts/upload_s7_200.py --ble --plc 2 --tag contexxor --ai
+
+ENLACES Y REFERENCIAS A ARCHIVOS:
+Siempre que menciones archivos (.awl, .bin, .json), utiliza el formato de enlace local clicable:
+file:///home/gus05/open-ppi-bridge/blocks/<archivo>
+De esta manera, el usuario podrá hacer Ctrl+Click en su terminal para abrirlo directamente en su editor.
 
 TUS RESPUESTAS:
 - Deben ser concisas, altamente técnicas, precisas y en español profesional.
@@ -214,12 +219,16 @@ REGLAS DE FORMATO:
 def interactive_chat(model: str = DEFAULT_MODEL):
     """Bucle de chat interactivo por consola con el copiloto industrial."""
     meta, _ = get_latest_extraction_info()
+    b_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "blocks"))
     print("=" * 70)
     print("🤖 OPEN-PPI-BRIDGE | COPILOTO DE IA INDUSTRIAL LOCAL")
     print(f"   Modelo : {model} (100% Offline / Privado)")
     if meta:
-        print(f"   📂 Último PLC extraído : {meta.get('bin_file')} (Estación {meta.get('plc_addr')}, {meta.get('size_bytes')}B)")
-        print(f"      Código AWL activo   : blocks/{meta.get('awl_file')} [{meta.get('timestamp')}]")
+        bin_p = meta.get("bin_url") or f"file://{os.path.join(b_dir, meta.get('bin_file', 'latest.bin'))}"
+        awl_p = meta.get("awl_url") or f"file://{os.path.join(b_dir, meta.get('awl_file', 'latest.awl'))}"
+        print(f"   📂 Último binario : {bin_p} ({meta.get('size_bytes')}B, Estación {meta.get('plc_addr')})")
+        print(f"   📝 Código AWL     : {awl_p} [{meta.get('timestamp')}]")
+        print(f"   💡 (Ctrl+Click en el enlace para abrir directamente el archivo en tu editor)")
     print("   Escribe 'salir' o 'exit' para terminar, o 'limpiar' para despejar la pantalla.")
     print("=" * 70)
 

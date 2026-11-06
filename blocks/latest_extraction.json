@@ -1,8 +1,10 @@
 {
   "bin_file": "trabajo_cpu222.bin",
   "awl_file": "trabajo_cpu222.awl",
+  "bin_url": "file:///home/gus05/open-ppi-bridge/blocks/trabajo_cpu222.bin",
+  "awl_url": "file:///home/gus05/open-ppi-bridge/blocks/trabajo_cpu222.awl",
   "block": "OB1",
   "plc_addr": 2,
   "size_bytes": 501,
-  "timestamp": "2026-11-05 20:30:10"
+  "timestamp": "2026-11-05 20:45:00"
 }

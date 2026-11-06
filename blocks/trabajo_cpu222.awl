@@ -1,5 +1,5 @@
 // Desensamblado Nativo Siemens S7-200 (CPU 22x / 21x)
-// Bloque: OB1 | Longitud total: 501 bytes | Código compilado: 382 B
+// Bloque: OB1 | Longitud total: 566 bytes | Código compilado: 382 B
 
 ORGANIZATION_BLOCK Bloque_de_programa:OB1
 TITLE=PROGRAMA PRINCIPAL EXTRAÍDO DE AUTOMATA EN VIVO

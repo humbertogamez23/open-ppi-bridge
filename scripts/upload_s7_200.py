@@ -562,7 +562,8 @@ def main():
     parser.add_argument("--plc", type=int, default=DEFAULT_PLC_ADDR, help=f"Dirección de la CPU (default: {DEFAULT_PLC_ADDR})")
 
     parser.add_argument("--block", choices=["OB1", "DB1", "SDB"], default="OB1", help="Bloque a extraer (default: OB1)")
-    parser.add_argument("-o", "--output", default=None, help="Ruta para guardar el archivo binario (.bin)")
+    parser.add_argument("--tag", default=None, help="Etiqueta identificadora de máquina o proyecto para nombres únicos (ej: contexxor, telar1)")
+    parser.add_argument("-o", "--output", default=None, help="Ruta fija para guardar el archivo binario (.bin). Si no se indica, se genera nombre único con fecha y hora.")
     parser.add_argument("--awl", default=None, nargs="?", const="", help="Desensamblar y exportar automáticamente a archivo AWL/STL")
     parser.add_argument("--ai", action="store_true", help="Auditar y analizar la lógica extraída con el copiloto de IA local (Qwen 2.5 Coder)")
 
@@ -597,11 +598,22 @@ def main():
         print("\n[-] No se pudo extraer el bloque del autómata.")
         sys.exit(1)
 
-    out_path = args.output or BLOCK_CONFIG[args.block]["file_default"]
+    if args.output:
+        out_path = args.output
+    else:
+        # Generar nombre único inteligente con marca de tiempo para evitar sobrescribir
+        tag_str = args.tag or f"plc{args.plc}"
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        out_path = os.path.join(BLOCKS_DIR, f"{tag_str}_{args.block.lower()}_{ts}.bin")
+
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "wb") as f:
         f.write(raw_block)
-    print(f"\n[★] Bloque binario guardado exitosamente en: {out_path} ({len(raw_block)} bytes)")
+
+    abs_bin = os.path.abspath(out_path)
+    file_bin_url = f"file://{abs_bin}"
+    print(f"\n[★] Bloque binario guardado con éxito ({len(raw_block)} bytes):")
+    print(f"    🔗 \033[1;4;34m{file_bin_url}\033[0m")
 
     # Validación y Desensamblado si es OB1 o DB1
     if args.block in ("OB1", "DB1"):
@@ -619,7 +631,11 @@ def main():
             with open(awl_out, "w", encoding="utf-8") as f:
                 f.write(awl_text)
 
-            print(f"[★] Contenido desensamblado exportado en: {awl_out}")
+            abs_awl = os.path.abspath(awl_out)
+            file_awl_url = f"file://{abs_awl}"
+            print(f"[★] Contenido desensamblado exportado en:")
+            print(f"    🔗 \033[1;4;34m{file_awl_url}\033[0m")
+            print(f"    (💡 Haz Ctrl+Click en el enlace para abrirlo directamente en tu editor)")
 
             # Registrar como última extracción para el Copiloto de IA local
             try:
@@ -628,6 +644,8 @@ def main():
                 latest_meta = {
                     "bin_file": os.path.basename(out_path),
                     "awl_file": os.path.basename(awl_out),
+                    "bin_url": file_bin_url,
+                    "awl_url": file_awl_url,
                     "block": args.block,
                     "plc_addr": args.plc,
                     "size_bytes": len(raw_block),
