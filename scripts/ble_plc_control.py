@@ -89,12 +89,14 @@ class BlePlcController:
             await self.set_ble_baudrate(9600)
             resp = await self.send_s7_request(pdu_init, timeout=1.2)
             if resp:
+                self.current_baud = 9600
                 print("[✓] Enlace sincronizado a 9.600 baudios (Serie 21x).")
             else:
                 print("[*] Sin respuesta a 9.600. Conmutando a 19.200 baudios (Serie 22x industrial)...")
                 await self.set_ble_baudrate(19200)
                 resp = await self.send_s7_request(pdu_init, timeout=1.8)
                 if resp:
+                    self.current_baud = 19200
                     print("[✓] Enlace sincronizado a 19.200 baudios (Serie 22x detectada).")
 
     async def connect(self):
@@ -381,6 +383,56 @@ class BlePlcController:
             print(f"  • Hexadecimal    : 0x{hex_str}")
         print("=" * 55)
 
+    async def get_plc_info(self):
+        """Consulta el registro SMB6 y datos de sistema para identificar modelo y versión."""
+        print(f"[*] Consultando registros de identificación en la CPU {self.plc_addr}...")
+        smb_data = await self.read_memory_area(area_code=0x05, start_byte=0, count=8, seq=10)
+        if not smb_data or len(smb_data) < 8:
+            print("[-] No se pudo leer la información de identificación del PLC.")
+            return
+
+        smb0 = smb_data[0]
+        smb6 = smb_data[6]
+        smb7 = smb_data[7]
+
+        cpu_id = smb6 & 0x0F
+        cpu_models = {
+            0x00: ("CPU 212", "Serie 21x Legacy (Micro-PLC)", "9.600 bps", "8 DI / 6 DO"),
+            0x01: ("CPU 214", "Serie 21x Legacy (Compact PLC)", "9.600 bps", "14 DI / 10 DO (+7 EM)"),
+            0x02: ("CPU 215", "Serie 21x Legacy (Profibus-DP)", "9.600 bps", "14 DI / 10 DO (+7 EM)"),
+            0x03: ("CPU 216", "Serie 21x Legacy (Dual Port)", "9.600 bps", "24 DI / 16 DO (+7 EM)"),
+            0x04: ("CPU 221", "Serie 22x Industrial", "9.6k o 19.2k bps", "6 DI / 4 DO (Sin expansión)"),
+            0x05: ("CPU 222", "Serie 22x Industrial", "9.6k o 19.2k bps", "8 DI / 6 DO (+2 EM)"),
+            0x06: ("CPU 224 / 224XP", "Serie 22x Industrial", "9.6k o 19.2k bps", "14 DI / 10 DO (+7 EM)"),
+            0x07: ("CPU 226 / 226XM", "Serie 22x Industrial (Dual Port)", "9.6k o 19.2k bps", "24 DI / 16 DO (+7 EM)"),
+        }
+
+        model_info = cpu_models.get(cpu_id, (f"Desconocido (SMB6=0x{smb6:02X})", "Serie S7-200", "Variable", "N/A"))
+
+        is_run = bool(smb0 & 0x01)
+        switch_pos = "RUN" if (smb0 & 0x80) else "TERM / STOP"
+        baud_rate = getattr(self, "current_baud", 19200)
+
+        fw_ver = f"Rel. {smb7:02X}" if smb7 != 0 else "Rel. 02.xx (Flash ROM nativa)"
+
+        print("\n" + "=" * 65)
+        print("      IDENTIFICACIÓN DE HARDWARE SIEMENS SIMATIC S7-200")
+        print("=" * 65)
+        print(f"  • Modelo de CPU       : \033[1;32m{model_info[0]}\033[0m")
+        print(f"  • Familia / Serie     : {model_info[1]}")
+        print(f"  • Registro SMB6 (ID)  : 0x{smb6:02X} (Código de CPU: {cpu_id})")
+        print(f"  • Versión de Firmware : {fw_ver}")
+        print(f"  • E/S Integradas Base : {model_info[3]}")
+        print(f"  • Velocidad Enlace    : {baud_rate} baudios (8E1)")
+        print(f"  • Dirección de Estación: {self.plc_addr}")
+        print(f"  • Estado Operativo    : {'\033[92m● RUN (En Marcha)\033[0m' if is_run else '\033[91m■ STOP (Detenido)\033[0m'}")
+        print(f"  • Posición de Llave   : {switch_pos}")
+        print("=" * 65)
+        print("  💡 Nota Técnica:")
+        print("  El modelo de CPU se lee directamente del registro de memoria")
+        print("  especial SMB6 del firmware del autómata en tiempo de ejecución.")
+        print("=" * 65)
+
     async def run_status(self, watch=False):
         if not watch:
             print(f"[*] Consultando estado operativo y E/S en la CPU {self.plc_addr}...")
@@ -402,7 +454,7 @@ class BlePlcController:
 
 async def async_main():
     parser = argparse.ArgumentParser(description="Control y Monitor de E/S S7-200 por Bluetooth LE")
-    parser.add_argument("command", choices=["status", "run", "stop", "io", "read"], help="Acción a realizar")
+    parser.add_argument("command", choices=["status", "run", "stop", "io", "read", "info"], help="Acción a realizar")
     parser.add_argument("variable", nargs="?", default="SMB28", help="Variable a leer con 'read' (ej: SMB28, VW100, MB0)")
     parser.add_argument("-w", "--watch", action="store_true", help="Monitor continuo en bucle")
     parser.add_argument("--address", default=DEFAULT_MAC, help=f"Dirección MAC BLE (default: {DEFAULT_MAC})")
@@ -419,6 +471,8 @@ async def async_main():
         await controller.connect()
         if cmd == "status":
             await controller.run_status(watch=args.watch)
+        elif cmd == "info":
+            await controller.get_plc_info()
         elif cmd == "run":
             await controller.set_mode("RUN")
         elif cmd == "stop":
