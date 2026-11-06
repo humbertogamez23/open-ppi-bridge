@@ -230,12 +230,12 @@ class BlePlcController:
 
         await asyncio.sleep(0.04)
 
-        # 2. Leer Entradas Digitales (IB0, IB1, IB2)
-        inputs = await self.read_memory_area(area_code=0x81, start_byte=0, count=3, seq=2)
+        # 2. Leer Entradas Digitales (5 bytes: IB0 a IB4 para CPU 222 + 2x EM223 de 16 E/S)
+        inputs = await self.read_memory_area(area_code=0x81, start_byte=0, count=5, seq=2)
         await asyncio.sleep(0.04)
 
-        # 3. Leer Salidas Digitales (QB0, QB1, QB2)
-        outputs = await self.read_memory_area(area_code=0x82, start_byte=0, count=3, seq=3)
+        # 3. Leer Salidas Digitales (5 bytes: QB0 a QB4 para CPU 222 + 2x EM223 de 16 E/S)
+        outputs = await self.read_memory_area(area_code=0x82, start_byte=0, count=5, seq=3)
         await asyncio.sleep(0.04)
 
         # 4. Leer Potenciómetros Analógicos (SMB28, SMB29)
@@ -277,22 +277,30 @@ class BlePlcController:
         print("-" * 65)
         print("  [ ENTRADAS DIGITALES (I) ]")
         if data["inputs"] and len(data["inputs"]) >= 1:
-            print("  • CPU 222 Base  (IB0): " + format_io_bits(data["inputs"][0], "I0", 8))
+            print("  • CPU 222 Base      (IB0): " + format_io_bits(data["inputs"][0], "I0", 8))
             if len(data["inputs"]) >= 2:
-                print("  • EM 223 Mod 1 (IB1): " + format_io_bits(data["inputs"][1], "I1", 8))
+                print("  • EM 223 #1 (16 DI) (IB1): " + format_io_bits(data["inputs"][1], "I1", 8) + "  [Canales 1..8]")
             if len(data["inputs"]) >= 3:
-                print("  • EM 223 Mod 2 (IB2): " + format_io_bits(data["inputs"][2], "I2", 8))
+                print("                      (IB2): " + format_io_bits(data["inputs"][2], "I2", 8) + "  [Canales 9..16]")
+            if len(data["inputs"]) >= 4:
+                print("  • EM 223 #2 (16 DI) (IB3): " + format_io_bits(data["inputs"][3], "I3", 8) + "  [Canales 1..8]")
+            if len(data["inputs"]) >= 5:
+                print("                      (IB4): " + format_io_bits(data["inputs"][4], "I4", 8) + "  [Canales 9..16]")
         else:
             print("    (No se pudieron consultar entradas)")
 
         print("-" * 65)
         print("  [ SALIDAS DIGITALES (Q) ]")
         if data["outputs"] and len(data["outputs"]) >= 1:
-            print("  • CPU 222 Base  (QB0): " + format_io_bits(data["outputs"][0], "Q0", 6) + "  (Q0.0 a Q0.5)")
+            print("  • CPU 222 Base      (QB0): " + format_io_bits(data["outputs"][0], "Q0", 6) + "  (Q0.0 a Q0.5)")
             if len(data["outputs"]) >= 2:
-                print("  • EM 223 Mod 1 (QB1): " + format_io_bits(data["outputs"][1], "Q1", 8))
+                print("  • EM 223 #1 (16 DO) (QB1): " + format_io_bits(data["outputs"][1], "Q1", 8) + "  [Canales 1..8]")
             if len(data["outputs"]) >= 3:
-                print("  • EM 223 Mod 2 (QB2): " + format_io_bits(data["outputs"][2], "Q2", 8))
+                print("                      (QB2): " + format_io_bits(data["outputs"][2], "Q2", 8) + "  [Canales 9..16]")
+            if len(data["outputs"]) >= 4:
+                print("  • EM 223 #2 (16 DO) (QB3): " + format_io_bits(data["outputs"][3], "Q3", 8) + "  [Canales 1..8]")
+            if len(data["outputs"]) >= 5:
+                print("                      (QB4): " + format_io_bits(data["outputs"][4], "Q4", 8) + "  [Canales 9..16]")
         else:
             print("    (No se pudieron consultar salidas)")
 
