@@ -55,15 +55,47 @@ def format_io_bits(byte_val: int, prefix: str, max_bits: int = 8) -> str:
     return "  ".join(parts)
 
 class BlePlcController:
-    def __init__(self, target_address=DEFAULT_MAC, plc_addr=PLC_ADDR, pc_addr=PC_ADDR):
+    def __init__(self, target_address=DEFAULT_MAC, plc_addr=PLC_ADDR, pc_addr=PC_ADDR, baud="auto"):
         self.target_address = target_address
         self.plc_addr = plc_addr
         self.pc_addr = pc_addr
+        self.baud = baud
         self.client = None
         self.rx_queue = asyncio.Queue()
 
     def notification_handler(self, sender, data: bytearray):
         self.rx_queue.put_nowait(bytes(data))
+
+    async def set_ble_baudrate(self, target_baud: int):
+        cmd = f"++BAUD:{target_baud}".encode()
+        while not self.rx_queue.empty():
+            self.rx_queue.get_nowait()
+        await self.client.write_gatt_char(RX_UUID, cmd, response=False)
+        await asyncio.sleep(0.08)
+
+    async def negotiate_connection(self):
+        pdu_init = bytes([
+            0x32, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00,
+            0xF0, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0xF0
+        ])
+        baud_str = str(self.baud).lower().strip()
+        if baud_str in ("9600", "19200", "187500"):
+            target_baud = int(baud_str)
+            print(f"[*] Configurando velocidad en baudios fija a {target_baud}...")
+            await self.set_ble_baudrate(target_baud)
+            await self.send_s7_request(pdu_init, timeout=1.8)
+        else:
+            print("[*] Negociando velocidad de bus RS485 (Auto-Baud 9.6k / 19.2k)...")
+            await self.set_ble_baudrate(9600)
+            resp = await self.send_s7_request(pdu_init, timeout=1.2)
+            if resp:
+                print("[✓] Enlace sincronizado a 9.600 baudios (Serie 21x).")
+            else:
+                print("[*] Sin respuesta a 9.600. Conmutando a 19.200 baudios (Serie 22x industrial)...")
+                await self.set_ble_baudrate(19200)
+                resp = await self.send_s7_request(pdu_init, timeout=1.8)
+                if resp:
+                    print("[✓] Enlace sincronizado a 19.200 baudios (Serie 22x detectada).")
 
     async def connect(self):
         print(f"[*] Conectando vía Bluetooth LE a {DEFAULT_NAME} ({self.target_address})...")
@@ -71,6 +103,7 @@ class BlePlcController:
         await self.client.connect()
         print(f"[✓] Enlace Bluetooth LE establecido con éxito.")
         await self.client.start_notify(TX_UUID, self.notification_handler)
+        await self.negotiate_connection()
 
     async def disconnect(self):
         if self.client and self.client.is_connected:
@@ -197,12 +230,12 @@ class BlePlcController:
 
         await asyncio.sleep(0.04)
 
-        # 2. Leer Entradas Digitales (IB0, IB1)
-        inputs = await self.read_memory_area(area_code=0x81, start_byte=0, count=2, seq=2)
+        # 2. Leer Entradas Digitales (IB0, IB1, IB2)
+        inputs = await self.read_memory_area(area_code=0x81, start_byte=0, count=3, seq=2)
         await asyncio.sleep(0.04)
 
-        # 3. Leer Salidas Digitales (QB0, QB1)
-        outputs = await self.read_memory_area(area_code=0x82, start_byte=0, count=2, seq=3)
+        # 3. Leer Salidas Digitales (QB0, QB1, QB2)
+        outputs = await self.read_memory_area(area_code=0x82, start_byte=0, count=3, seq=3)
         await asyncio.sleep(0.04)
 
         # 4. Leer Potenciómetros Analógicos (SMB28, SMB29)
@@ -217,7 +250,7 @@ class BlePlcController:
 
     async def display_status(self, data):
         print("\n" + "=" * 65)
-        print("          ESTADO INTEGRAL SIEMENS S7-200 (CPU 214) [BLE]")
+        print("          ESTADO INTEGRAL SIEMENS S7-200 [BLUETOOTH LE]")
         print("=" * 65)
         print(f"  • Enlace Inalámbrico : \033[92mCONECTADO (Bluetooth LE OK)\033[0m")
         print(f"  • Dispositivo        : {DEFAULT_NAME} ({self.target_address})")
@@ -243,17 +276,23 @@ class BlePlcController:
 
         print("-" * 65)
         print("  [ ENTRADAS DIGITALES (I) ]")
-        if data["inputs"] and len(data["inputs"]) >= 2:
-            print("    IB0: " + format_io_bits(data["inputs"][0], "I0", 8))
-            print("    IB1: " + format_io_bits(data["inputs"][1], "I1", 6) + "  (I1.0 a I1.5)")
+        if data["inputs"] and len(data["inputs"]) >= 1:
+            print("  • CPU 222 Base  (IB0): " + format_io_bits(data["inputs"][0], "I0", 8))
+            if len(data["inputs"]) >= 2:
+                print("  • EM 223 Mod 1 (IB1): " + format_io_bits(data["inputs"][1], "I1", 8))
+            if len(data["inputs"]) >= 3:
+                print("  • EM 223 Mod 2 (IB2): " + format_io_bits(data["inputs"][2], "I2", 8))
         else:
             print("    (No se pudieron consultar entradas)")
 
         print("-" * 65)
         print("  [ SALIDAS DIGITALES (Q) ]")
-        if data["outputs"] and len(data["outputs"]) >= 2:
-            print("    QB0: " + format_io_bits(data["outputs"][0], "Q0", 8))
-            print("    QB1: " + format_io_bits(data["outputs"][1], "Q1", 2) + "  (Q1.0 a Q1.1)")
+        if data["outputs"] and len(data["outputs"]) >= 1:
+            print("  • CPU 222 Base  (QB0): " + format_io_bits(data["outputs"][0], "Q0", 6) + "  (Q0.0 a Q0.5)")
+            if len(data["outputs"]) >= 2:
+                print("  • EM 223 Mod 1 (QB1): " + format_io_bits(data["outputs"][1], "Q1", 8))
+            if len(data["outputs"]) >= 3:
+                print("  • EM 223 Mod 2 (QB2): " + format_io_bits(data["outputs"][2], "Q2", 8))
         else:
             print("    (No se pudieron consultar salidas)")
 
@@ -360,13 +399,14 @@ async def async_main():
     parser.add_argument("-w", "--watch", action="store_true", help="Monitor continuo en bucle")
     parser.add_argument("--address", default=DEFAULT_MAC, help=f"Dirección MAC BLE (default: {DEFAULT_MAC})")
     parser.add_argument("--plc", type=int, default=PLC_ADDR, help=f"Dirección de la CPU (default: {PLC_ADDR})")
+    parser.add_argument("--baud", default="auto", help="Velocidad en baudios: auto (conmuta 9.6k y 19.2k), 9600 o 19200 (default: auto)")
     args = parser.parse_args()
 
     cmd = args.command
     if cmd == "io":
         cmd = "status"
 
-    controller = BlePlcController(target_address=args.address, plc_addr=args.plc)
+    controller = BlePlcController(target_address=args.address, plc_addr=args.plc, baud=args.baud)
     try:
         await controller.connect()
         if cmd == "status":
