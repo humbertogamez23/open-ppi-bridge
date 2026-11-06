@@ -3,17 +3,22 @@
 ai_copilot.py - Copiloto de IA Local y Offline para Lógica Siemens S7-200
 =============================================================================
 Asistente de ingeniería industrial basado en modelos LLM locales (Qwen 2.5 Coder
-vía Ollama) para análisis, auditoría de seguridad y generación de código AWL/STL.
+vía Ollama) para análisis, auditoría de seguridad, diálogo técnico y generación de código AWL/STL.
 
 Funciona de forma 100% privada, desconectada (air-gapped) y ligera (~1.3 GB RAM).
 
 Capacidades:
-  1. Auditoría de Seguridad (--audit): Detecta condiciones de carrera, interlocks
+  1. Feedback y Diálogo Consultivo: Explica razonamientos, hace preguntas técnicas
+     y conoce qué parámetros mover antes de ejecutar o generar código.
+  2. Catálogo Completo de Scripts: Domina los argumentos (flags --) de todas las
+     herramientas de open-ppi-bridge (BLE, serial, flasheo, escaneo y monitoreo).
+  3. Memoria de Conversación: Mantiene el contexto entre turnos en el modo interactivo.
+  4. Auditoría de Seguridad (--audit): Detecta condiciones de carrera, interlocks
      faltantes y salidas conflictivas simultáneas.
-  2. Explicación Técnica (--explain): Traduce redes AWL complejas a lenguaje natural.
-  3. Generación de Lógica (--generate): Escribe código AWL nativo a partir de
+  5. Explicación Técnica (--explain): Traduce redes AWL complejas a lenguaje natural.
+  6. Generación de Lógica (--generate): Escribe código AWL nativo a partir de
      descripciones en lenguaje natural, listo para ensamblar con s7_awl_asm.py.
-  4. Modo Interactivo (--chat): Terminal interactiva para consultar dudas técnicas.
+  7. Modo Interactivo (--chat / ia-coder): Terminal interactiva con memoria y ejecución.
 
 Autores: Humberto Gámez (@humbertogamez23) & Antigravity AI (open-ppi-bridge project)
 Licencia: GPL-3.0
@@ -22,62 +27,106 @@ Licencia: GPL-3.0
 import sys
 import os
 import json
+import re
 import argparse
 import urllib.request
 import urllib.error
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_MODEL = "qwen2.5-coder:1.5b"
 
-SYSTEM_PROMPT = """Eres el Copiloto de Inteligencia Artificial Industrial de open-ppi-bridge, especializado en programación, auditoría y análisis de autómatas Siemens SIMATIC S7-200 (CPU 21x y 22x) en lenguaje AWL/STL (Lista de Instrucciones).
+SYSTEM_PROMPT = """Eres el Copiloto de Inteligencia Artificial Industrial de open-ppi-bridge, especializado en programación, diagnóstico y auditoría de autómatas Siemens SIMATIC S7-200 (CPU 21x y 22x) en lenguaje AWL/STL (Lista de Instrucciones).
+Tu personalidad es la de un ingeniero colega de automatización: conversacional, técnico, atento, consultivo y muy práctico.
 
-CONOCIMIENTOS TÉCNICOS ESENCIALES:
-- Mnemónicos AWL Siemens:
-  * LD, LDN: Carga contacto normalmente abierto / cerrado.
-  * A, AN: Conjunción lógica AND con contacto NA / NC.
-  * O, ON: Disyunción lógica OR con contacto NA / NC.
-  * ALD, OLD: AND / OR entre bloques de contactos de la pila lógica.
-  * =: Asignación a bobina física (Q) o marca interna (M, V).
-  * S, R: Set (activación con enclavamiento) y Reset de bits.
-  * TON, TONR, TOF: Temporizadores con retardo (Base 1ms, 10ms o 100ms).
-  * CALL: Llamada a subrutinas (SBR0, SBR1, etc.).
-  * MOVW, MOVB, MOVD: Transferencia de palabras, bytes o dobles palabras (AC0, VW, SMB).
-- Áreas de memoria S7-200:
-  * I (Entradas digitales físicas: I0.0..I1.7).
-  * Q (Salidas digitales físicas: Q0.0..Q1.7).
-  * M (Marcas de memoria de control: M0.0..M31.7).
-  * V (Memoria variable / Bloque de Datos DB1: VB, VW, VD).
-  * AC (Acumuladores: AC0..AC3).
-  * SM (Marcas especiales: SM0.0 bit siempre ON, SM0.1 primer scan, SMB28/29 potenciómetros analógicos).
-- Criterios de Seguridad Industrial:
-  * Interbloqueos de seguridad entre salidas que no deben activarse simultáneamente (salidas conflictivas).
-  * Temporizadores de seguridad y control de sobretiempos de proceso.
-  * Paradas de emergencia y retenciones de marcha seguras.
-  * Supervisión de estados y confirmación de señales de sensores (entradas I).
+=============================================================================
+1. REGLA FUNDAMENTAL: FEEDBACK Y PREGUNTAS ANTES DE GENERAR O EJECUTAR
+=============================================================================
+- NUNCA sueltes código AWL gigante ni comandos sin hablar primero.
+- HABLA UN POCO PRIMERO (FEEDBACK):
+  a) Si el usuario pide desarrollar una LÓGICA O PROGRAMA AWL:
+     1. Resume lo que entendiste de su requerimiento.
+     2. Explica brevemente la estrategia técnica (qué entradas, salidas, marcas de memoria y temporizadores TON/TOF propones).
+     3. Pregunta si tiene asignadas entradas/salidas físicas específicas (ej: I0.0, I0.1, Q0.0) o si aprueba tu propuesta antes de escribir el bloque completo.
+  b) Si el usuario pide INTERACTUAR CON EL PLC (extraer, flashear, monitorear):
+     1. Pregunta qué método de conexión usará: ¿Inalámbrico Bluetooth (`--ble`) o Cable serial (`--port /dev/ttyUSB0`)?
+     2. Confirma la dirección de la CPU en bus PPI (por defecto es `--plc 2`).
+     3. Pregunta o sugiere el nombre de la máquina con `--tag <nombre>`.
 
-HERRAMIENTAS DISPONIBLES EN EL PROYECTO (open-ppi-bridge):
-- Extraer programa del PLC: `python3 scripts/upload_s7_200.py --ble --tag <nombre_maquina> --ai` (genera automáticamente nombres únicos con fecha y hora para no sobreescribir) o con cable (`--port COM3` / `--port /dev/ttyUSB0`).
-- Flashear a EEPROM: `python3 scripts/flash_s7_200.py --ble --block OB1 blocks/<nombre>.bin`
-- Simular scan y lógica: `python3 scripts/simulador_awl.py blocks/<nombre>.awl`
-- Desensamblar/Ensamblar: `python3 scripts/s7_awl_asm.py blocks/<nombre>.bin`
-- Escaneo de estaciones: `python3 scripts/ble_scan_ppi.py` o `python3 scripts/scan_ppi.py`
-- Listar archivos del repo: `ls -lh blocks/` o `ls -lh scripts/`
+=============================================================================
+2. QUÉ PARÁMETRO MOVER ANTE PROBLEMAS DE COMUNICACIÓN
+=============================================================================
+Si el usuario reporta errores, sabes exactamente qué parámetro técnico sugerir:
+- "No responde / Timeout":
+  -> La dirección puede no ser la 2. Sugerir escanear con `ble_scan_ppi.py` o ampliar timeout con `--timeout 0.25`.
+- "Error de velocidad / sincronismo":
+  -> Probar con `--baud 9600` o `--baud 19200` en vez de auto.
+- "No puedo escribir / error al flashear":
+  -> El PLC está en RUN y la CPU bloquea la escritura. Hay que detenerlo primero con `ble_plc_control.py stop` o pasar el flag `--stop` en `flash_s7_200.py`.
+- "No quiero sobreescribir el programa anterior":
+  -> Usar `--tag <nombre>` en `upload_s7_200.py`, que genera nombres únicos con fecha y hora.
 
-CAPACIDAD DE EJECUCIÓN:
-Cuando el usuario te pida realizar una tarea concreta del sistema (como extraer el programa del PLC, simular lógica, flashear o listar archivos), describe brevemente lo que harás y coloca al final de tu respuesta una línea exacta con el formato:
+=============================================================================
+3. CATÁLOGO EXACTO DE HERRAMIENTAS Y FLAGS (ARGUMENTOS --)
+=============================================================================
+¡IMPORTANTE! No inventes flags inexistentes (por ejemplo, `upload_s7_200.py` no necesita flag `--extract`, ya es el extractor). Tampoco mezcles `--ble` y `--port` a la vez (se usa uno u otro).
+
+1. `python3 scripts/upload_s7_200.py` (Extraer programa/datos de la CPU):
+   - `--ble`: Conexión inalámbrica Bluetooth LE vía ESP32 (MAC: 28:84:85:91:45:06).
+   - `--port <disp>`: Conexión serie cableada (ej: `/dev/ttyUSB0` o `COM3`).
+   - `--plc <num>`: Dirección de la CPU en PPI (default: 2).
+   - `--tag <nombre>`: Etiqueta de la máquina (ej: `--tag contexxor`, `--tag telar1`).
+   - `--block {OB1,DB1,SDB}`: Bloque a extraer (default: OB1).
+   - `--baud <auto|9600|19200>`: Velocidad en baudios.
+   - `--ai`: Lanza auditoría automática con IA tras la extracción.
+   - `--awl`: Exporta código desensamblado a archivo .awl legible.
+   - Ejemplo BLE recomendado:
+     COMANDO: python3 scripts/upload_s7_200.py --ble --plc 2 --tag contexxor --ai
+
+2. `python3 scripts/flash_s7_200.py` (Cargar bloques binarios al autómata):
+   - `--ble` o `--port <disp>`: Canal de enlace.
+   - `--program`: Flashea solo el bloque de programa (OB1).
+   - `--all`: Flashea SDB + OB1 + DB1.
+   - `--system`: Flashea solo Bloque de Sistema (SDB).
+   - `--data`: Flashea solo Bloque de Datos (DB1).
+   - `--stop`: Detiene la CPU antes de escribir (evita errores de bloqueo).
+   - `--run`: Pone la CPU en RUN al finalizar.
+   - Ejemplo recomendado:
+     COMANDO: python3 scripts/flash_s7_200.py --ble --program --stop --run blocks/archivo.bin
+
+3. `python3 scripts/ble_plc_control.py` (Control y monitoreo por Bluetooth LE):
+   - Acciones: `status`, `run`, `stop`, `io`, `read <var>`, `info`.
+   - `-w` / `--watch`: Monitoreo continuo en bucle en tiempo real.
+   - `--plc <num>`: Dirección CPU (default: 2).
+   - Ejemplos:
+     COMANDO: python3 scripts/ble_plc_control.py status --plc 2
+     COMANDO: python3 scripts/ble_plc_control.py io -w --plc 2
+     COMANDO: python3 scripts/ble_plc_control.py read SMB28 --plc 2
+
+4. `python3 scripts/ble_scan_ppi.py` (Escanear estaciones PPI por BLE):
+   - `--max-addr <num>` (default: 15), `--timeout <seg>` (default: 0.18).
+   - Ejemplo:
+     COMANDO: python3 scripts/ble_scan_ppi.py --max-addr 15
+
+5. `python3 scripts/simulador_awl.py` (Simular lógica AWL en PC):
+   - `blocks/<archivo>.awl`, `--interactive` (consola interactiva).
+   - Ejemplo:
+     COMANDO: python3 scripts/simulador_awl.py --interactive blocks/latest.awl
+
+6. `python3 scripts/s7_awl_asm.py` (Ensamblador / Desensamblador):
+   - `--disasm <bin>` a texto, `--asm <awl>` a binario.
+
+=============================================================================
+4. FORMATO DE COMANDO PARA EJECUCIÓN DIRECTA
+=============================================================================
+Cuando acuerdes una acción con el usuario o cuando él te dé el visto bueno, coloca al final de tu respuesta en una línea única el comando exacto:
 COMANDO: <comando bash a ejecutar>
-Ejemplo con asignación automática de nombre:
-COMANDO: python3 scripts/upload_s7_200.py --ble --plc 2 --tag contexxor --ai
 
-ENLACES Y REFERENCIAS A ARCHIVOS:
-Siempre que menciones archivos (.awl, .bin, .json), utiliza el formato de enlace local clicable:
+=============================================================================
+5. ENLACES CLICABLES A ARCHIVOS
+=============================================================================
+Siempre que menciones archivos (.awl, .bin, .json), escribe el enlace en formato:
 file:///home/gus05/open-ppi-bridge/blocks/<archivo>
-De esta manera, el usuario podrá hacer Ctrl+Click en su terminal para abrirlo directamente en su editor.
-
-TUS RESPUESTAS:
-- Deben ser concisas, altamente técnicas, precisas y en español profesional.
-- En generación de código, entrega código AWL bien estructurado con comentarios por Red (Network).
 """
 
 
@@ -110,14 +159,13 @@ def get_latest_extraction_info() -> Tuple[Optional[dict], str]:
     return None, ""
 
 
-def query_ollama(prompt: str, system: str = SYSTEM_PROMPT, model: str = DEFAULT_MODEL, url: str = DEFAULT_OLLAMA_URL, temperature: float = 0.2) -> Optional[str]:
-    """Envía una consulta a la API de Ollama y devuelve la respuesta generada."""
+def build_context_system_prompt(base_system: str, prompt_hint: str = "") -> str:
+    """Enriquece el system prompt con el contexto del último archivo extraído o especificado."""
     meta, code = get_latest_extraction_info()
     extra_ctx = ""
 
     # Detectar si el usuario mencionó un archivo .awl específico en su mensaje
-    import re
-    match_awl = re.search(r'([\w\-\./]+\.awl)', prompt)
+    match_awl = re.search(r'([\w\-\./]+\.awl)', prompt_hint)
     if match_awl:
         specified_path = match_awl.group(1)
         b_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "blocks"))
@@ -155,25 +203,33 @@ INFORMACIÓN DEL ÚLTIMO PROGRAMA EXTRAÍDO EN ESTE TALLER/MÁQUINA:
 ```awl
 {snippet}
 ```
-Si el usuario pregunta por el programa extraído, la lógica o la máquina actual, responde usando esta lógica real.
+Si el usuario pregunta por el programa extraído, la lógica o la máquina actual, responde usando esta información real.
 """
 
-    eff_system = (system + "\n" + extra_ctx) if (extra_ctx and system == SYSTEM_PROMPT) else system
+    return (base_system + "\n" + extra_ctx) if extra_ctx else base_system
 
+
+def chat_with_ollama(
+    messages: List[Dict[str, str]],
+    model: str = DEFAULT_MODEL,
+    url: str = DEFAULT_OLLAMA_URL,
+    temperature: float = 0.3
+) -> Optional[str]:
+    """Envía un historial de mensajes a la API /api/chat de Ollama."""
     payload = {
         "model": model,
-        "prompt": prompt,
-        "system": eff_system,
+        "messages": messages,
         "stream": False,
         "options": {
             "temperature": temperature,
+            "repeat_penalty": 1.15,
             "num_ctx": 4096,
-            "num_predict": 512,
+            "num_predict": 768,
         }
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
-        f"{url}/api/generate",
+        f"{url}/api/chat",
         data=data,
         headers={"Content-Type": "application/json", "User-Agent": "open-ppi-copilot"}
     )
@@ -182,12 +238,28 @@ Si el usuario pregunta por el programa extraído, la lógica o la máquina actua
         with urllib.request.urlopen(req, timeout=180.0) as resp:
             if resp.status == 200:
                 result = json.loads(resp.read().decode("utf-8"))
-                return result.get("response", "").strip()
+                return result.get("message", {}).get("content", "").strip()
     except urllib.error.URLError as e:
         print(f"[-] Error de conexión con Ollama ({e}). Asegúrese de que el servicio esté activo (`ollama serve`).")
     except Exception as e:
         print(f"[-] Error inesperado procesando la consulta: {e}")
     return None
+
+
+def query_ollama(
+    prompt: str,
+    system: str = SYSTEM_PROMPT,
+    model: str = DEFAULT_MODEL,
+    url: str = DEFAULT_OLLAMA_URL,
+    temperature: float = 0.2
+) -> Optional[str]:
+    """Envía una consulta única empaquetándola en formato chat."""
+    eff_system = build_context_system_prompt(system, prompt_hint=prompt)
+    messages = [
+        {"role": "system", "content": eff_system},
+        {"role": "user", "content": prompt}
+    ]
+    return chat_with_ollama(messages, model=model, url=url, temperature=temperature)
 
 
 def audit_awl_code(awl_text: str, model: str = DEFAULT_MODEL) -> str:
@@ -246,11 +318,12 @@ REGLAS DE FORMATO:
 
 
 def interactive_chat(model: str = DEFAULT_MODEL):
-    """Bucle de chat interactivo por consola con el copiloto industrial."""
+    """Bucle de chat interactivo por consola con memoria conversacional y copiloto industrial."""
     meta, _ = get_latest_extraction_info()
     b_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "blocks"))
-    print("=" * 70)
-    print("🤖 OPEN-PPI-BRIDGE | COPILOTO DE IA INDUSTRIAL LOCAL")
+
+    print("=" * 72)
+    print("🤖 OPEN-PPI-BRIDGE | COPILOTO DE IA INDUSTRIAL (ia-coder)")
     print(f"   Modelo : {model} (100% Offline / Privado)")
     if meta:
         bin_p = meta.get("bin_url") or f"file://{os.path.join(b_dir, meta.get('bin_file', 'latest.bin'))}"
@@ -258,24 +331,50 @@ def interactive_chat(model: str = DEFAULT_MODEL):
         print(f"   📂 Último binario : {bin_p} ({meta.get('size_bytes')}B, Estación {meta.get('plc_addr')})")
         print(f"   📝 Código AWL     : {awl_p} [{meta.get('timestamp')}]")
         print(f"   💡 (Ctrl+Click en el enlace para abrir directamente el archivo en tu editor)")
-    print("   Escribe 'salir' o 'exit' para terminar, o 'limpiar' para despejar la pantalla.")
-    print("=" * 70)
+    print("   Comandos de chat: 'reset' (reiniciar memoria), 'limpiar' (pantalla), 'salir'")
+    print("=" * 72)
+
+    eff_system = build_context_system_prompt(SYSTEM_PROMPT)
+    messages: List[Dict[str, str]] = [
+        {"role": "system", "content": eff_system}
+    ]
 
     while True:
         try:
             user_input = input("\n👨‍💻 Tú: ").strip()
             if not user_input:
                 continue
-            if user_input.lower() in ("salir", "exit", "quit"):
+
+            lowered = user_input.lower()
+            if lowered in ("salir", "exit", "quit"):
                 print("[*] Saliendo del Copiloto de IA.")
                 break
-            if user_input.lower() in ("limpiar", "clear"):
+
+            if lowered in ("limpiar", "clear"):
                 os.system("clear" if os.name == "posix" else "cls")
                 continue
 
+            if lowered in ("reset", "reiniciar", "resetear"):
+                eff_system = build_context_system_prompt(SYSTEM_PROMPT)
+                messages = [{"role": "system", "content": eff_system}]
+                print("\n[✓] Memoria e historial de conversación reiniciados con éxito.")
+                continue
+
+            # Agregar mensaje del usuario al historial
+            messages.append({"role": "user", "content": user_input})
+
+            # Limitar la memoria para evitar sobrecarga en CPU (mantiene system + últimos 10 turnos)
+            if len(messages) > 13:
+                messages = [messages[0]] + messages[-12:]
+
             print("\n🤖 Copiloto (pensando)...")
-            answer = query_ollama(user_input, model=model)
+            answer = chat_with_ollama(messages, model=model, temperature=0.3)
+
             if answer:
+                # Guardar en memoria la respuesta del asistente
+                messages.append({"role": "assistant", "content": answer})
+
+                # Separar propuesta de comando si la hay
                 lines = answer.splitlines()
                 cmd_to_run = None
                 display_lines = []
@@ -302,7 +401,7 @@ def interactive_chat(model: str = DEFAULT_MODEL):
                         os.system(cmd_to_run)
                         print("-" * 60 + "\n[✓] Comando completado.")
                     else:
-                        print("[*] Comando cancelado por el usuario.")
+                        print("[*] Comando no ejecutado por elección del usuario.")
             else:
                 print("[-] No se recibió respuesta del modelo local.")
 
