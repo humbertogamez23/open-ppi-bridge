@@ -1,0 +1,13 @@
+// Desensamblado Nativo Siemens S7-200 (CPU 22x / 21x)
+// Bloque: DB1 (Bloque de Datos / Memoria V) | Longitud: 59 bytes
+
+DATA_BLOCK_PAGE DB1
+TITLE=PARAMETROS Y RECETAS EN MEMORIA V (XORELLA CONTEXXOR)
+BEGIN
+// Espacio de Memoria V asignado: 21 bytes
+// VB0..VB9: Variable de texto / Perfil de operador / Receta
+VB0    16#01
+VB1    16#08          // Longitud: 8 caracteres
+VB2    'USUARIO1'
+VB10   16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00
+END_DATA_BLOCK_PAGE

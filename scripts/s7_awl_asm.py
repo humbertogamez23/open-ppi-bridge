@@ -46,12 +46,13 @@ class S7_200_Disassembler:
         
         block_type = self.data[6]  # 0x08 = OB1, 0x0B = SDB, 0x0A = DB1
         block_len = int.from_bytes(self.data[11:13], "big")
-        code_offset = int.from_bytes(self.data[29:33], "big")
-        code_len = int.from_bytes(self.data[33:37], "big")
-        networks_ob1 = int.from_bytes(self.data[37:39], "little")
+        code_offset = int.from_bytes(self.data[29:33], "big") if len(self.data) >= 33 else 0
+        code_len = int.from_bytes(self.data[33:37], "big") if len(self.data) >= 37 else 0
+        networks_ob1 = int.from_bytes(self.data[37:39], "little") if len(self.data) >= 39 else 0
 
+        type_str = "OB1" if block_type == 0x08 else ("DB1" if block_type == 0x0A else ("SDB" if block_type == 0x0B else f"0x{block_type:02X}"))
         return {
-            "type": "OB1" if block_type == 0x08 else f"0x{block_type:02X}",
+            "type": type_str,
             "block_len": block_len,
             "code_offset": code_offset,
             "code_len": code_len,
@@ -220,8 +221,56 @@ class S7_200_Disassembler:
 
         return "\n".join(out)
 
+    def _disassemble_db1(self, hdr: Dict) -> str:
+        import zlib
+        out = [
+            f"// Desensamblado Nativo Siemens S7-200 (CPU 22x / 21x)",
+            f"// Bloque: DB1 (Bloque de Datos / Memoria V) | Longitud: {len(self.data)} bytes\n",
+            "DATA_BLOCK_PAGE DB1",
+            "TITLE=PARAMETROS Y RECETAS EN MEMORIA V (XORELLA CONTEXXOR)",
+            "BEGIN"
+        ]
+
+        idx = self.data.find(b"\x78\x9c")
+        if idx != -1:
+            try:
+                d = zlib.decompressobj()
+                raw_payload = d.decompress(self.data[idx:])
+                out.append(f"// Espacio de Memoria V asignado: {len(raw_payload)} bytes")
+                
+                # Formato S7-200 String: [hdr] [len] [caracteres ASCII...]
+                if len(raw_payload) >= 2 and raw_payload[1] < len(raw_payload):
+                    slen = raw_payload[1]
+                    sval = raw_payload[2 : 2 + slen]
+                    try:
+                        str_text = sval.decode("ascii")
+                        out.append(f"// VB0..VB{1+slen}: Variable de texto / Perfil de operador / Receta")
+                        out.append(f"VB0    16#{raw_payload[0]:02X}")
+                        out.append(f"VB1    16#{slen:02X}          // Longitud: {slen} caracteres")
+                        out.append(f"VB2    '{str_text}'")
+                        rem = raw_payload[2 + slen:]
+                        if rem:
+                            hex_rem = ", ".join(f"16#{b:02X}" for b in rem)
+                            out.append(f"VB{2+slen}   {hex_rem}")
+                    except UnicodeDecodeError:
+                        for i, b in enumerate(raw_payload):
+                            out.append(f"VB{i:<4} 16#{b:02X}")
+                else:
+                    for i, b in enumerate(raw_payload):
+                        out.append(f"VB{i:<4} 16#{b:02X}")
+            except Exception as e:
+                out.append(f"// Error descomprimiendo payload zlib: {e}")
+        else:
+            out.append("// No se encontró flujo comprimido zlib en el bloque.")
+
+        out.append("END_DATA_BLOCK_PAGE")
+        return "\n".join(out)
+
     def disassemble_all(self) -> str:
         hdr = self.parse_header()
+        if hdr.get("type") == "DB1":
+            return self._disassemble_db1(hdr)
+
         # Verificar si es el proyecto piloto de banco (308/310 bytes)
         if len(self.data) in (308, 310) and self.data[11:13] == b"\x01\x34":
             return self._disassemble_pilot_demo(hdr)

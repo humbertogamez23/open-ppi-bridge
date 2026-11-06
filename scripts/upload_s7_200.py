@@ -603,10 +603,10 @@ def main():
         f.write(raw_block)
     print(f"\n[★] Bloque binario guardado exitosamente en: {out_path} ({len(raw_block)} bytes)")
 
-    # Validación y Desensamblado si es OB1
-    if args.block == "OB1":
+    # Validación y Desensamblado si es OB1 o DB1
+    if args.block in ("OB1", "DB1"):
         if len(raw_block) >= 3 and raw_block[:3] == b"\xFB\x70\x70":
-            print(f"[✓] Magic bytecode nativo validado con éxito: FB 70 70")
+            print(f"[✓] Magic bytecode nativo validado con éxito: FB 70 70 (Bloque {args.block})")
         else:
             print(f"[!] Advertencia: Magic bytecode inicial es {raw_block[:3].hex().upper()} (esperado FB 70 70)")
 
@@ -619,7 +619,7 @@ def main():
             with open(awl_out, "w", encoding="utf-8") as f:
                 f.write(awl_text)
 
-            print(f"[★] Código fuente AWL desensamblado en: {awl_out}")
+            print(f"[★] Contenido desensamblado exportado en: {awl_out}")
 
             # Registrar como última extracción para el Copiloto de IA local
             try:
@@ -640,8 +640,9 @@ def main():
             except Exception:
                 pass
 
+            title_str = "CÓDIGO AWL" if args.block == "OB1" else "DATOS Y VARIABLES DE MEMORIA V"
             print("\n" + "=" * 65)
-            print(" RESUMEN DEL CÓDIGO AWL EXTRAÍDO DIRECTO DE LA MEMORIA:")
+            print(f" RESUMEN DE {title_str} EXTRAÍDO DIRECTO DE LA MEMORIA:")
             print("=" * 65)
             for line in awl_text.splitlines()[:30]:
                 print(f"  {line}")
@@ -661,7 +662,7 @@ def main():
                 except Exception as e:
                     print(f"[!] Nota: No se pudo ejecutar el análisis de IA ({e})")
         except Exception as e:
-            print(f"[!] Nota: No se pudo desensamblar a AWL ({e}), pero el binario está intacto.")
+            print(f"[!] Nota: No se pudo decodificar el bloque ({e}), pero el binario está intacto.")
 
     print("\n[✓] ¡Proceso de extracción completado con éxito total!")
 
