@@ -172,8 +172,9 @@ class SerialTransport(BaseTransport):
 
 class BleTransport(BaseTransport):
     """Transporte Bluetooth LE directo con Bleak (Windows 11 / Linux nativo)."""
-    def __init__(self, target_address: str = DEFAULT_BLE_MAC):
+    def __init__(self, target_address: str = DEFAULT_BLE_MAC, baud: int = 9600):
         self.target_address = target_address
+        self.baud = baud
         self.client = None
         self.rx_queue = None
         self.loop = None
@@ -213,6 +214,11 @@ class BleTransport(BaseTransport):
                 self.rx_queue.put_nowait(bytes(data))
 
             await self.client.start_notify(BLE_TX_UUID, _notify_handler)
+
+            if self.baud in (9600, 19200, 187500):
+                cmd = f"++BAUD:{self.baud}".encode()
+                await self.client.write_gatt_char(BLE_RX_UUID, cmd, response=False)
+                await asyncio.sleep(0.08)
 
         loop.run_until_complete(_connect())
 
@@ -702,7 +708,7 @@ def main():
         transport = MockTransport()
     elif args.ble:
         is_ble_mode = True
-        transport = BleTransport(target_address=args.mac)
+        transport = BleTransport(target_address=args.mac, baud=args.baud)
     else:
         port = args.port or auto_detect_serial()
         transport = SerialTransport(port=port, baud=args.baud)

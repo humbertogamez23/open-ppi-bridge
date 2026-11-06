@@ -331,7 +331,7 @@ class S7_200_SerialUploader:
 # Motor de Extracción Asíncrono Nativo BLE (Bleak)
 # ============================================================================
 
-async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_ADDR, pc_addr: int = DEFAULT_PC_ADDR) -> Optional[bytes]:
+async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_ADDR, pc_addr: int = DEFAULT_PC_ADDR, baud: str = "auto") -> Optional[bytes]:
     try:
         from bleak import BleakClient
         from bleak.exc import BleakDeviceNotFoundError, BleakError
@@ -374,6 +374,13 @@ async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_A
     await client.start_notify(BLE_TX_UUID, lambda s, d: rx_q.put_nowait(bytes(d)))
 
     current_fc = 0x5C
+
+    async def set_ble_baudrate(target_baud: int):
+        cmd = f"++BAUD:{target_baud}".encode()
+        while not rx_q.empty():
+            rx_q.get_nowait()
+        await client.write_gatt_char(BLE_RX_UUID, cmd, response=False)
+        await asyncio.sleep(0.08)
 
     async def trans(pdu: bytes) -> Optional[bytes]:
         nonlocal current_fc
@@ -427,15 +434,39 @@ async def run_ble_upload(mac: str, block_key: str, plc_addr: int = DEFAULT_PLC_A
         return bytes(accum) if accum else None
 
     try:
-        # 0. Negociación inicial de PDU (0xF0 - 240B)
-        print(f"[*] Negociando canal de comunicación S7comm (PDU 240B)...")
+        # 0. Negociación de Velocidad y Parámetros S7comm (PDU 240B)
         pdu_init = bytes([
             0x32, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00,
             0xF0, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0xF0
         ])
-        resp_pdu = await trans(pdu_init)
-        if not resp_pdu:
-            print(f"[-] Advertencia: Sin confirmación explícita de PDU. Continuando...")
+
+        baud_str = str(baud).lower().strip()
+        if baud_str in ("9600", "19200", "187500"):
+            target_baud = int(baud_str)
+            print(f"[*] Configurando velocidad en baudios fija a {target_baud}...")
+            await set_ble_baudrate(target_baud)
+            print(f"[*] Negociando canal de comunicación S7comm (PDU 240B)...")
+            resp_pdu = await trans(pdu_init)
+            if not resp_pdu:
+                print(f"[-] Advertencia: Sin respuesta inicial a {target_baud} baudios. Continuando...")
+            else:
+                print(f"[✓] Enlace y PDU sincronizados con éxito a {target_baud} baudios.")
+        else:
+            # Modo Auto-Baud (Doble negociación Serie 21x / 22x)
+            print(f"[*] Negociando velocidad de bus RS485 (Auto-Baud: 9.6k Serie 21x / 19.2k Serie 22x)...")
+            await set_ble_baudrate(9600)
+            resp_pdu = await trans(pdu_init)
+            if resp_pdu:
+                print(f"[✓] ¡Enlace establecido con éxito a 9.600 baudios! (Compatible con Serie 21x / 22x base).")
+            else:
+                print(f"[*] Sin respuesta a 9.600 baudios. Probando conmutación a 19.200 baudios (Serie 22x industrial)...")
+                await set_ble_baudrate(19200)
+                current_fc = 0x5C
+                resp_pdu = await trans(pdu_init)
+                if resp_pdu:
+                    print(f"[✓] ¡Enlace establecido con éxito a 19.200 baudios! (Serie 22x detectada).")
+                else:
+                    print(f"[-] Sin respuesta ACK en 9.600 ni en 19.200 baudios. Intentando Start Upload...")
 
         # 1. Start Upload (0x1D)
         seq = 0x0040
@@ -524,7 +555,7 @@ def main():
         description="Extractor Autónomo de Programas para Siemens SIMATIC S7-200 (Windows y Linux)"
     )
     parser.add_argument("--port", default=None, help="Puerto serial (ej: COM3 en Windows, /dev/ttyUSB0 en Linux)")
-    parser.add_argument("--baud", type=int, default=DEFAULT_BAUD, help=f"Velocidad en baudios (default: {DEFAULT_BAUD})")
+    parser.add_argument("--baud", default="auto", help="Velocidad en baudios: auto (conmuta 9.6k y 19.2k), 9600 o 19200 (default: auto)")
     parser.add_argument("--ble", action="store_true", help="Utilizar conexión inalámbrica Bluetooth LE (vía ESP32)")
     parser.add_argument("--mac", default=DEFAULT_BLE_MAC, help=f"Dirección MAC BLE (default: {DEFAULT_BLE_MAC})")
     parser.add_argument("--dry-run", action="store_true", help="Modo simulación (sin acceder al hardware físico)")
@@ -546,10 +577,11 @@ def main():
         raw_block = uploader.upload_block(block_key=args.block)
         transport.close()
     elif args.ble:
-        raw_block = asyncio.run(run_ble_upload(mac=args.mac, block_key=args.block, plc_addr=args.plc))
+        raw_block = asyncio.run(run_ble_upload(mac=args.mac, block_key=args.block, plc_addr=args.plc, baud=args.baud))
     else:
         port = args.port or auto_detect_serial()
-        transport = SerialTransport(port=port, baud=args.baud)
+        serial_baud = 9600 if str(args.baud).lower() == "auto" else int(args.baud)
+        transport = SerialTransport(port=port, baud=serial_baud)
         try:
             transport.open()
         except Exception as e:
