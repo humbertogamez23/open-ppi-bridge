@@ -1,0 +1,460 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html>
+<html b:css='false' b:defaultwidgetversion='2' b:layoutsversion='3' expr:dir='data:blog.languageDirection' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.google.com/2005/gml/expr'>
+<head>
+  <meta charset='utf-8'/>
+  <meta content='width=device-width, initial-scale=1' name='viewport'/>
+  <title><b:if cond='data:blog.pageType == "item"'><data:blog.pageName/> | <data:blog.title/><b:else/><data:blog.title/> - <data:blog.pageTitle/></b:if></title>
+  
+  <!-- SEO & Favicon -->
+  <meta expr:content='data:blog.metaDescription' name='description'/>
+  <link href='https://fonts.googleapis.com' rel='preconnect'/>
+  <link crossorigin='' href='https://fonts.gstatic.com' rel='preconnect'/>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap' rel='stylesheet'/>
+  
+  <!-- Prism.js for Syntax Highlighting (Dark contrast inside white paper) -->
+  <link href='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css' rel='stylesheet'/>
+  <link href='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.css' rel='stylesheet'/>
+
+  <b:skin><![CDATA[
+  /* --------------------------------------------------------------------------
+     THEME: Engineering Minimal (Stripe / GitHub Docs Style)
+     Designed for: Reverse Engineering, Embedded Systems & Industrial Automation
+     -------------------------------------------------------------------------- */
+  :root {
+    --bg-page: #f9fafb;
+    --bg-card: #ffffff;
+    --text-primary: #111827;
+    --text-secondary: #4b5563;
+    --text-muted: #9ca3af;
+    --accent: #0f766e;          /* Industrial Teal / Siemens aesthetic */
+    --accent-light: #ccfbf1;
+    --accent-hover: #115e59;
+    --border-color: #e5e7eb;
+    --code-bg: #111827;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --max-w: 820px;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 4rem;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+  a:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+  }
+
+  /* Container */
+  .container {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* Header & Navigation */
+  header.site-header {
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 1.25rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .brand-logo .dot {
+    width: 10px;
+    height: 10px;
+    background-color: var(--accent);
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .brand-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+  .brand-title:hover {
+    text-decoration: none;
+  }
+  .nav-links {
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  .nav-links a {
+    color: var(--text-secondary);
+  }
+  .nav-links a:hover {
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .btn-github {
+    background: #111827;
+    color: #ffffff !important;
+    padding: 0.4rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .btn-github:hover {
+    background: #1f2937;
+    text-decoration: none !important;
+  }
+
+  /* Main Layout */
+  main {
+    margin-top: 2.5rem;
+  }
+
+  /* Post Card / Post Details */
+  article.post-entry {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 2.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+
+  @media (max-width: 640px) {
+    article.post-entry {
+      padding: 1.5rem;
+    }
+  }
+
+  .post-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .post-meta time {
+    color: var(--text-secondary);
+  }
+  .post-badge {
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  h1.post-title, h2.post-title {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.03em;
+    line-height: 1.25;
+    margin-bottom: 1.25rem;
+  }
+  h2.post-title a {
+    color: var(--text-primary);
+  }
+  h2.post-title a:hover {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* Post Body Content Styling */
+  .post-body {
+    font-size: 1.05rem;
+    color: #1f2937;
+  }
+  .post-body p {
+    margin-bottom: 1.35rem;
+  }
+  .post-body h2 {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 2.25rem 0 1rem 0;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border-color);
+    letter-spacing: -0.02em;
+  }
+  .post-body h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 1.75rem 0 0.75rem 0;
+  }
+  .post-body ul, .post-body ol {
+    margin: 1rem 0 1.5rem 1.5rem;
+  }
+  .post-body li {
+    margin-bottom: 0.4rem;
+  }
+  .post-body blockquote {
+    border-left: 4px solid var(--accent);
+    background: #f0fdfa;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 8px 8px 0;
+    font-style: normal;
+    color: #134e4a;
+  }
+  .post-body blockquote p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Inline and Block Code */
+  code, pre code {
+    font-family: var(--font-mono) !important;
+  }
+  :not(pre) > code {
+    background-color: #f3f4f6;
+    color: #111827;
+    padding: 0.2rem 0.45rem;
+    border-radius: 5px;
+    font-size: 0.88em;
+    border: 1px solid #e5e7eb;
+    font-weight: 500;
+  }
+  pre[class*="language-"] {
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    font-size: 0.88rem !important;
+    background: var(--code-bg) !important;
+    border: 1px solid #1f2937;
+  }
+
+  /* Tables */
+  .post-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.92rem;
+  }
+  .post-body th, .post-body td {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border-color);
+    text-align: left;
+  }
+  .post-body th {
+    background: #f9fafb;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .post-body tr:nth-child(even) {
+    background-color: #fafafa;
+  }
+
+  /* Images & Figures */
+  .post-body img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    display: block;
+    margin: 1.5rem auto;
+  }
+
+  /* Callout box */
+  .callout {
+    border: 1px solid var(--border-color);
+    border-left: 4px solid #3b82f6;
+    background: #f8fafc;
+    padding: 1rem 1.25rem;
+    border-radius: 6px;
+    margin: 1.5rem 0;
+    font-size: 0.95rem;
+  }
+
+  /* Pager / Pagination */
+  .blog-pager {
+    display: flex;
+    justify-content: space-between;
+    margin: 2rem 0;
+  }
+  .btn-pager {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.6rem 1.2rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  .btn-pager:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  /* Footer */
+  footer.site-footer {
+    border-top: 1px solid var(--border-color);
+    padding: 2.5rem 0;
+    margin-top: 3rem;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    text-align: center;
+  }
+
+  /* Comments */
+  #comments {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+  }
+  #comments h4 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  ]]></b:skin>
+</head>
+<body>
+
+  <!-- Site Header -->
+  <header class='site-header'>
+    <div class='container header-inner'>
+      <a class='brand-logo' expr:href='data:blog.homepageUrl'>
+        <span class='dot'></span>
+        <span class='brand-title'><data:blog.title/></span>
+      </a>
+      <nav class='nav-links'>
+        <a expr:href='data:blog.homepageUrl'>Artículos</a>
+        <a class='btn-github' href='https://github.com/humbertogamez23/open-ppi-bridge' rel='noopener' target='_blank'>
+          <svg height='16' viewBox='0 0 16 16' width='16' fill='currentColor'>
+            <path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z'></path>
+          </svg>
+          GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class='container'>
+    <b:section id='main' showaddelement='false'>
+      <b:widget id='Blog1' locked='true' title='Blog Posts' type='Blog' version='2'>
+        <b:includable id='main' var='top'>
+          
+          <!-- Post Loop -->
+          <b:loop values='data:posts' var='post'>
+            <article class='post-entry'>
+              
+              <div class='post-meta'>
+                <time expr:datetime='data:post.date'><data:post.date/></time>
+                <b:if cond='data:post.labels'>
+                  <span>&#8226;</span>
+                  <b:loop values='data:post.labels' var='label'>
+                    <a class='post-badge' expr:href='data:label.url'><data:label.name/></a>
+                  </b:loop>
+                </b:if>
+              </div>
+
+              <b:if cond='data:blog.pageType == "item"'>
+                <h1 class='post-title'><data:post.title/></h1>
+              <b:else/>
+                <h2 class='post-title'>
+                  <a expr:href='data:post.url'><data:post.title/></a>
+                </h2>
+              </b:if>
+
+              <div class='post-body' expr:id='"post-body-" + data:post.id'>
+                <data:post.body/>
+              </div>
+
+              <!-- Single Post Comments -->
+              <b:if cond='data:blog.pageType == "item"'>
+                <b:if cond='data:post.allowComments'>
+                  <div id='comments'>
+                    <h4>Discusión</h4>
+                    <b:include data='post' name='threaded-comment-form'/>
+                  </div>
+                </b:if>
+              </b:if>
+
+            </article>
+          </b:loop>
+
+          <!-- Pager -->
+          <b:if cond='data:newerPageUrl or data:olderPageUrl'>
+            <div class='blog-pager'>
+              <b:if cond='data:newerPageUrl'>
+                <a class='btn-pager' expr:href='data:newerPageUrl'>&#8592; Publicaciones recientes</a>
+              <b:else/>
+                <span></span>
+              </b:if>
+              <b:if cond='data:olderPageUrl'>
+                <a class='btn-pager' expr:href='data:olderPageUrl'>Publicaciones anteriores &#8594;</a>
+              </b:if>
+            </div>
+          </b:if>
+
+        </b:includable>
+
+        <b:includable id='threaded-comment-form' var='post'>
+          <div class='comment-form'>
+            <p style='color: var(--text-muted); font-size: 0.9rem;'>Los comentarios se gestionan a través de la cuenta de Google / Blogger.</p>
+          </div>
+        </b:includable>
+
+      </b:widget>
+    </b:section>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class='site-footer'>
+    <div class='container'>
+      <p><strong><data:blog.title/></strong> &#8212; Ingenier&#237;a inversa, automatizaci&#243;n industrial y sistemas embebidos.</p>
+      <p style='margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);'>C&#243;digo abierto y documentaci&#243;n independiente. Proyecto no afiliado a Siemens AG.</p>
+    </div>
+  </footer>
+
+  <!-- Syntax Highlighting Scripts (Prism.js) -->
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js'></script>
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js'></script>
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.js'></script>
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js'></script>
+
+  <!-- Mermaid.js for sequence/flow diagrams -->
+  <script type='module'>
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+  </script>
+
+</body>
+</html>
