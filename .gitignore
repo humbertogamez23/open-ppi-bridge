@@ -27,3 +27,9 @@ app/**/.idea/
 app/**/*.iml
 app/**/android/.gradle/
 app/**/android/local.properties
+
+# ESP-IDF firmware build artifacts
+firmware/**/build/
+firmware/**/managed_components/
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old
