@@ -114,7 +114,36 @@ def query_ollama(prompt: str, system: str = SYSTEM_PROMPT, model: str = DEFAULT_
     """Envía una consulta a la API de Ollama y devuelve la respuesta generada."""
     meta, code = get_latest_extraction_info()
     extra_ctx = ""
-    if meta and code:
+
+    # Detectar si el usuario mencionó un archivo .awl específico en su mensaje
+    import re
+    match_awl = re.search(r'([\w\-\./]+\.awl)', prompt)
+    if match_awl:
+        specified_path = match_awl.group(1)
+        b_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "blocks"))
+        cand1 = os.path.join(b_dir, os.path.basename(specified_path))
+        cand2 = os.path.abspath(specified_path)
+        target = cand1 if os.path.exists(cand1) else (cand2 if os.path.exists(cand2) else None)
+
+        if target and os.path.exists(target):
+            try:
+                with open(target, "r", encoding="utf-8") as f:
+                    file_code = f.read()
+                snippet = "\n".join(file_code.splitlines()[:75])
+                extra_ctx = f"""
+INFORMACIÓN DEL ARCHIVO AWL ESPECIFICADO DIRECTAMENTE POR EL USUARIO:
+- Archivo AWL: {os.path.basename(target)}
+- Enlace local: file://{target}
+- Código fuente a analizar:
+```awl
+{snippet}
+```
+Basa tu respuesta y análisis rigurosamente en las redes de este archivo especificado.
+"""
+            except Exception:
+                pass
+
+    if not extra_ctx and meta and code:
         snippet = "\n".join(code.splitlines()[:60])
         extra_ctx = f"""
 INFORMACIÓN DEL ÚLTIMO PROGRAMA EXTRAÍDO EN ESTE TALLER/MÁQUINA:
