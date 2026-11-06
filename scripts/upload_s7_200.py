@@ -620,6 +620,26 @@ def main():
                 f.write(awl_text)
 
             print(f"[★] Código fuente AWL desensamblado en: {awl_out}")
+
+            # Registrar como última extracción para el Copiloto de IA local
+            try:
+                import json, shutil
+                b_dir = os.path.dirname(os.path.abspath(out_path))
+                latest_meta = {
+                    "bin_file": os.path.basename(out_path),
+                    "awl_file": os.path.basename(awl_out),
+                    "block": args.block,
+                    "plc_addr": args.plc,
+                    "size_bytes": len(raw_block),
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+                with open(os.path.join(b_dir, "latest_extraction.json"), "w", encoding="utf-8") as f:
+                    json.dump(latest_meta, f, indent=2)
+                shutil.copy2(out_path, os.path.join(b_dir, "latest.bin"))
+                shutil.copy2(awl_out, os.path.join(b_dir, "latest.awl"))
+            except Exception:
+                pass
+
             print("\n" + "=" * 65)
             print(" RESUMEN DEL CÓDIGO AWL EXTRAÍDO DIRECTO DE LA MEMORIA:")
             print("=" * 65)

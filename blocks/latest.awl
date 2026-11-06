@@ -1,0 +1,60 @@
+// Desensamblado Nativo Siemens S7-200 (CPU 22x / 21x)
+// Bloque: OB1 | Longitud total: 501 bytes | Código compilado: 382 B
+
+ORGANIZATION_BLOCK Bloque_de_programa:OB1
+TITLE=PROGRAMA PRINCIPAL EXTRAÍDO DE AUTOMATA EN VIVO
+BEGIN
+Network 1 // Habilitación y Permisivos Iniciales de Ciclo
+LD     SM0.0
+=      M0.0
+Network 2 // Temporizador de Pre-chequeo / Arranque (Base 1ms, 2000 ticks = 2.0s)
+LD     M0.0
+TON    T32, 2000
+Network 3 // Activación Etapa Inicial de Marcha
+LD     T32
+AN     M1.0
+=      Q0.0
+Network 4 // Temporizador de Confirmación de Presión / Flujo (Base 1ms, 1000 ticks = 1.0s)
+LD     Q0.0
+TON    T96, 1000
+Network 5 // Enclavamiento y Válvula Principal
+LD     T96
+A      I0.0
+=      Q0.1
+Network 6 // Temporizador de Ciclo Base (Base 100ms, 600 ticks = 60.0s)
+LD     Q0.1
+TON    T37, 600
+Network 7 // Llamada a Subrutina de Secuencia Escalonada (SBR0)
+LD     T37
+CALL   SBR0
+Network 8 // Señalización de Estado en Panel / HMI
+LD     Q0.0
+O      Q0.1
+=      M0.7
+END_ORGANIZATION_BLOCK
+
+SUBROUTINE_BLOCK SBR_0:SBR0
+TITLE=SECUENCIA INDUSTRIAL ESCALONADA (TEMPORIZADORES DE PROCESO)
+BEGIN
+Network 1 // Etapa 1: Temporizador de Proceso (Base 100ms, 9000 ticks = 900.0s = 15.0 min)
+LD     M0.7
+AN     T40
+TON    T40, 9000
+Network 2 // Activación Salida Etapa 1
+LD     T40
+AN     T41
+=      Q0.2
+Network 3 // Etapa 2: Temporizador de Proceso (Base 100ms, 15000 ticks = 1500.0s = 25.0 min)
+LD     Q0.2
+TON    T41, 15000
+Network 4 // Activación Salida Etapa 2
+LD     T41
+AN     T42
+=      Q0.3
+Network 5 // Etapa 3: Temporizador de Proceso (Base 100ms, 21000 ticks = 2100.0s = 35.0 min)
+LD     Q0.3
+TON    T42, 21000
+Network 6 // Fin de Ciclo Escalonado y Aviso de Fin
+LD     T42
+=      Q0.4
+END_SUBROUTINE_BLOCK

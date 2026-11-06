@@ -85,12 +85,50 @@ def check_ollama_status(url: str = DEFAULT_OLLAMA_URL) -> bool:
         return False
 
 
+def get_latest_extraction_info() -> Tuple[Optional[dict], str]:
+    """Lee los metadatos y código del último bloque extraído en vivo."""
+    b_dir = os.path.join(os.path.dirname(__file__), "..", "blocks")
+    meta_path = os.path.join(b_dir, "latest_extraction.json")
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            awl_path = os.path.join(b_dir, meta.get("awl_file", "latest.awl"))
+            code = ""
+            if os.path.exists(awl_path):
+                with open(awl_path, "r", encoding="utf-8") as f:
+                    code = f.read()
+            return meta, code
+        except Exception:
+            pass
+    return None, ""
+
+
 def query_ollama(prompt: str, system: str = SYSTEM_PROMPT, model: str = DEFAULT_MODEL, url: str = DEFAULT_OLLAMA_URL, temperature: float = 0.2) -> Optional[str]:
     """Envía una consulta a la API de Ollama y devuelve la respuesta generada."""
+    meta, code = get_latest_extraction_info()
+    extra_ctx = ""
+    if meta and code:
+        snippet = "\n".join(code.splitlines()[:60])
+        extra_ctx = f"""
+INFORMACIÓN DEL ÚLTIMO PROGRAMA EXTRAÍDO EN ESTE TALLER/MÁQUINA:
+- Archivo binario: blocks/{meta.get('bin_file')} ({meta.get('size_bytes')} bytes)
+- Archivo AWL: blocks/{meta.get('awl_file')}
+- Estación autómata: Dirección {meta.get('plc_addr')} | Bloque: {meta.get('block')}
+- Fecha y hora: {meta.get('timestamp')}
+- Código fuente AWL de la máquina:
+```awl
+{snippet}
+```
+Si el usuario pregunta por el programa extraído, la lógica o la máquina actual, responde usando esta lógica real.
+"""
+
+    eff_system = (system + "\n" + extra_ctx) if (extra_ctx and system == SYSTEM_PROMPT) else system
+
     payload = {
         "model": model,
         "prompt": prompt,
-        "system": system,
+        "system": eff_system,
         "stream": False,
         "options": {
             "temperature": temperature,
@@ -174,9 +212,13 @@ REGLAS DE FORMATO:
 
 def interactive_chat(model: str = DEFAULT_MODEL):
     """Bucle de chat interactivo por consola con el copiloto industrial."""
+    meta, _ = get_latest_extraction_info()
     print("=" * 70)
     print("🤖 OPEN-PPI-BRIDGE | COPILOTO DE IA INDUSTRIAL LOCAL")
-    print(f"   Modelo: {model} (100% Offline / Privado)")
+    print(f"   Modelo : {model} (100% Offline / Privado)")
+    if meta:
+        print(f"   📂 Último PLC extraído : {meta.get('bin_file')} (Estación {meta.get('plc_addr')}, {meta.get('size_bytes')}B)")
+        print(f"      Código AWL activo   : blocks/{meta.get('awl_file')} [{meta.get('timestamp')}]")
     print("   Escribe 'salir' o 'exit' para terminar, o 'limpiar' para despejar la pantalla.")
     print("=" * 70)
 
