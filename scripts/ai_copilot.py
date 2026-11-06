@@ -9,7 +9,7 @@ Funciona de forma 100% privada, desconectada (air-gapped) y ligera (~1.3 GB RAM)
 
 Capacidades:
   1. Auditoría de Seguridad (--audit): Detecta condiciones de carrera, interlocks
-     faltantes (ej. estrella-delta simultáneos) y pulsos virtuales no reseteados.
+     faltantes y salidas conflictivas simultáneas.
   2. Explicación Técnica (--explain): Traduce redes AWL complejas a lenguaje natural.
   3. Generación de Lógica (--generate): Escribe código AWL nativo a partir de
      descripciones en lenguaje natural, listo para ensamblar con s7_awl_asm.py.
@@ -51,9 +51,10 @@ CONOCIMIENTOS TÉCNICOS ESENCIALES:
   * AC (Acumuladores: AC0..AC3).
   * SM (Marcas especiales: SM0.0 bit siempre ON, SM0.1 primer scan, SMB28/29 potenciómetros analógicos).
 - Criterios de Seguridad Industrial:
-  * Interbloqueos mecánicos/eléctricos por software (ej. Estrella Q0.1 y Delta Q0.2 NUNCA juntos).
-  * Pulsadores virtuales de la App móvil (V200.0, V200.1) SIEMPRE deben auto-resetearse para evitar comandos pegados por pérdida de enlace BLE.
-  * Retención de marcha con contacto auxiliar y parada de emergencia de corte activo (I0.1 con AN o A según contacto físico).
+  * Interbloqueos de seguridad entre salidas que no deben activarse simultáneamente (salidas conflictivas).
+  * Temporizadores de seguridad y control de sobretiempos de proceso.
+  * Paradas de emergencia y retenciones de marcha seguras.
+  * Supervisión de estados y confirmación de señales de sensores (entradas I).
 
 HERRAMIENTAS DISPONIBLES EN EL PROYECTO (open-ppi-bridge):
 - Extraer programa del PLC: `python3 scripts/upload_s7_200.py --ble -o blocks/<nombre>.bin --ai` (o con cable `--port COM3` / `--port /dev/ttyUSB0`).
@@ -157,19 +158,19 @@ Si el usuario pregunta por el programa extraído, la lógica o la máquina actua
 
 def audit_awl_code(awl_text: str, model: str = DEFAULT_MODEL) -> str:
     """Audita un código AWL en busca de riesgos de seguridad, interlocks y buenas prácticas."""
-    prompt = f"""Realiza una AUDITORÍA TÉCNICA DE SEGURIDAD INDUSTRIAL para el siguiente código AWL de Siemens S7-200:
+    prompt = f"""Realiza una AUDITORÍA TÉCNICA DE SEGURIDAD INDUSTRIAL para el siguiente código AWL de Siemens S7-200.
+
+IMPORTANTE: Basa tu análisis ÚNICA Y EXCLUSIVAMENTE en el código que se muestra abajo. NO asumas ni inventes funciones, nombres de máquinas o dispositivos que no estén en este texto.
 
 ```awl
 {awl_text}
 ```
 
 Estructura tu reporte con:
-1. 🔍 Resumen General de la Lógica (Propósito del bloque y subrutinas).
-2. ⚠️ Puntos Críticos y Verificación de Seguridad:
-   - ¿Existen interbloqueos adecuados entre salidas mutuamente excluyentes (ej. contactores estrella/delta o apertura/cierre)?
-   - ¿El paro de emergencia y seguridades cortan la retención de marcha?
-   - ¿Las variables de control remoto (bits V o de App móvil) tienen auto-reset de seguridad?
-3. 💡 Recomendaciones de Mejora o Corrección (si aplica).
+1. 🔍 Resumen General de la Lógica (Propósito del bloque OB1 y subrutinas según las redes reales).
+2. ⏱️ Análisis de Temporizadores y Etapas (Tiempos de ciclo y temporizadores activos).
+3. ⚠️ Puntos Críticos y Verificación de Seguridad (Interbloqueos entre salidas físicas, condiciones de parada y fallas).
+4. 💡 Recomendaciones de Mantenimiento y Operación.
 """
     resp = query_ollama(prompt, model=model, temperature=0.1)
     return resp or "[-] No se pudo obtener la auditoría del modelo local."
@@ -178,7 +179,7 @@ Estructura tu reporte con:
 def explain_awl_code(awl_text: str, model: str = DEFAULT_MODEL) -> str:
     """Explica detalladamente qué hace cada red del código AWL."""
     prompt = f"""Explica en detalle y de forma comprensible para un técnico de mantenimiento qué hace el siguiente código AWL de Siemens S7-200.
-Explica red por red (Network) la función de las entradas, marcas, temporizadores y salidas:
+Explica red por red (Network) la función de las entradas, marcas, temporizadores y salidas reales del código:
 
 ```awl
 {awl_text}
