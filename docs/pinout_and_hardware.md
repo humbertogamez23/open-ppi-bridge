@@ -74,6 +74,11 @@ To properly power and interface the FTDI FT232RL module:
 > 
 > Simply plug your **FTDI FT232RL USB-RS485 module** into this female USB-A socket. The ESP32-S3 firmware will initialize it automatically.
 
+> [!NOTE]
+> **💡 Engineering Rationale: Why Modular USB Host instead of Discrete Breadboards?**  
+> Building an RS-485 transceiver from scratch on a breadboard requires calculating 3.3V-to-5V level shifters, adding 100 nF decoupling capacitors, placing 4.7 kΩ fail-safe bias resistors, and orchestrating manual DE/RE direction switching—creating a fragile spiderweb of loose jumper wires vulnerable to factory EMI, motor noise, and machine vibration.  
+> By pairing the ESP32-S3's hardware USB Host with a modular **FTDI FT232RL USB-RS485 dongle**, all crystal oscillation, ESD line protection, transceivers, and automatic direction control remain self-contained on factory-tested PCBs. This eliminates discrete passive components, prevents loose-wire bench failures, and allows any maintenance technician to hot-swap a field-damaged transceiver in under 30 seconds without soldering.
+
 ---
 
 ## 3. RS-485 Transceiver to S7-200 DB9 Wiring
