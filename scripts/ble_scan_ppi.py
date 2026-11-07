@@ -22,8 +22,33 @@ def build_sd1(dest: int, src: int = 0, fc: int = 0x49) -> bytes:
     fcs = (dest + src + fc) & 0xFF
     return bytes([0x10, dest, src, fc, fcs, 0x16])
 
+
+def is_valid_ppi_response(resp: bytes, expected_addr: int, expected_src: int = 0) -> bool:
+    """Verifica rigurosamente si la respuesta es una trama PPI válida de la estación esperada."""
+    if not resp:
+        return False
+    # Caso 1: Confirmación corta SC (0xE5)
+    if resp == b"\xE5":
+        return True
+    # Caso 2: Trama corta SD1 (6 bytes: 10 DA SA FC FCS 16)
+    if len(resp) >= 6 and resp[0] == 0x10 and resp[-1] == 0x16:
+        da, sa, fc, fcs = resp[1], resp[2], resp[3], resp[4]
+        if da == expected_src and sa == expected_addr and fcs == ((da + sa + fc) & 0xFF):
+            return True
+    # Caso 3: Trama de datos SD2 (68 LE LE 68 DA SA ... FCS 16)
+    if len(resp) >= 6 and resp[0] == 0x68 and resp[-1] == 0x16:
+        length = resp[1]
+        if resp[2] == length and len(resp) == length + 6:
+            da, sa = resp[4], resp[5]
+            if da == expected_src and sa == expected_addr:
+                calc_fcs = sum(resp[4:-2]) & 0xFF
+                if resp[-2] == calc_fcs:
+                    return True
+    return False
+
+
 class BlePpiScanner:
-    def __init__(self, target_address=DEFAULT_MAC, max_addr=31, src=0, timeout=0.18, baud="auto"):
+    def __init__(self, target_address=DEFAULT_MAC, max_addr=31, src=0, timeout=0.22, baud="auto"):
         self.target_address = target_address
         self.max_addr = max_addr
         self.src = src
@@ -36,11 +61,30 @@ class BlePpiScanner:
         self.rx_buffer.extend(data)
         self.response_event.set()
 
-    async def _scan_pass(self, client, baud_rate: int) -> list:
-        # Enviar comando de conmutación de velocidad al ESP32
+    async def _set_baud(self, client, baud_rate: int):
+        """Envía comando de conmutación de baudios y drena la respuesta del ESP32 (++BAUD:OK)."""
+        self.rx_buffer.clear()
+        self.response_event.clear()
         cmd = f"++BAUD:{baud_rate}".encode()
         await client.write_gatt_char(RX_UUID, cmd, response=False)
-        await asyncio.sleep(0.08)
+
+        # Esperar a que el firmware del ESP32 confirme con ++BAUD:OK
+        deadline = time.time() + 0.35
+        while time.time() < deadline:
+            if b"++BAUD:" in self.rx_buffer:
+                break
+            try:
+                await asyncio.wait_for(self.response_event.wait(), timeout=max(0.02, deadline - time.time()))
+                self.response_event.clear()
+            except asyncio.TimeoutError:
+                pass
+
+        await asyncio.sleep(0.06)
+        self.rx_buffer.clear()
+        self.response_event.clear()
+
+    async def _scan_pass(self, client, baud_rate: int) -> list:
+        await self._set_baud(client, baud_rate)
 
         print(f"\n[*] Barrido a {baud_rate} baudios (Rango 0..{self.max_addr}):")
         encontradas = []
@@ -49,28 +93,39 @@ class BlePpiScanner:
             if addr == self.src:
                 continue
 
-            frame = build_sd1(dest=addr, src=self.src, fc=0x49)
             self.rx_buffer.clear()
             self.response_event.clear()
 
+            frame = build_sd1(dest=addr, src=self.src, fc=0x49)
             await client.write_gatt_char(RX_UUID, frame, response=False)
 
-            try:
-                await asyncio.wait_for(self.response_event.wait(), timeout=self.timeout)
-            except asyncio.TimeoutError:
-                pass
+            deadline = time.time() + self.timeout
+            found = False
+            valid_frame = None
 
-            if len(self.rx_buffer) > 0:
-                # Filtrar posibles respuestas de comando
-                clean = bytes(b for b in self.rx_buffer if b not in b"+BAUDOK:")
-                if clean:
-                    encontradas.append(addr)
-                    hex_resp = " ".join(f"{b:02X}" for b in self.rx_buffer)
-                    print(f"  [+] ¡ESTACIÓN ENCONTRADA! Dirección: {addr:2d} | Respuesta: {hex_resp}")
-                    await asyncio.sleep(0.03)
-                    continue
+            while time.time() < deadline:
+                curr = bytes(self.rx_buffer)
+                if is_valid_ppi_response(curr, expected_addr=addr, expected_src=self.src):
+                    found = True
+                    valid_frame = curr
+                    break
+                try:
+                    await asyncio.wait_for(self.response_event.wait(), timeout=max(0.02, deadline - time.time()))
+                    self.response_event.clear()
+                except asyncio.TimeoutError:
+                    pass
 
-            print(f"  [.] Estación {addr:2d}: Sin respuesta")
+            # Purgar el búfer tras cada dirección para evitar fugas de bytes a la siguiente
+            self.rx_buffer.clear()
+            self.response_event.clear()
+
+            if found and valid_frame:
+                encontradas.append(addr)
+                hex_resp = " ".join(f"{b:02X}" for b in valid_frame)
+                print(f"  [+] ¡ESTACIÓN ENCONTRADA! Dirección: {addr:2d} | Respuesta: {hex_resp}")
+            else:
+                print(f"  [.] Estación {addr:2d}: Sin respuesta")
+
             await asyncio.sleep(0.03)
 
         return encontradas
