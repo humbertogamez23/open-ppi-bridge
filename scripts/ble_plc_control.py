@@ -289,7 +289,7 @@ class BlePlcController:
 
     async def get_status_data(self):
         """Obtiene una instantánea del estado, identificación de CPU, entradas y salidas."""
-        # 1. Leer SMB0..SMB7 (Modo operativo, ID de CPU en SMB6, Firmware en SMB7)
+        # 1. Leer SMB0..SMB7 al inicio (Modo operativo, ID de CPU en SMB6, Firmware en SMB7)
         smb_data = await self.read_memory_area(area_code=0x05, start_byte=0, count=8, seq=1)
         if smb_data is None or len(smb_data) < 8:
             await asyncio.sleep(0.06)
@@ -307,15 +307,40 @@ class BlePlcController:
 
         # 4. Leer Potenciómetros Analógicos (SMB28, SMB29)
         pots = await self.read_memory_area(area_code=0x05, start_byte=28, count=2, seq=4)
+        await asyncio.sleep(0.04)
+
+        # 5. Segunda lectura de SMB0 para detección dinámica de ciclo de scan
+        smb0_end = await self.read_memory_area(area_code=0x05, start_byte=0, count=1, seq=5)
 
         smb0 = smb_data[0] if smb_data and len(smb_data) > 0 else None
         smb6 = smb_data[6] if smb_data and len(smb_data) > 6 else None
         smb7 = smb_data[7] if smb_data and len(smb_data) > 7 else None
+        smb0_end_val = smb0_end[0] if smb0_end and len(smb0_end) > 0 else None
+
+        # Detección dinámica de ciclo de scan:
+        # En RUN, SM0.6 (Scan Clock, bit 6) y SM0.5 (1s Clock, bit 5) oscilan en cada scan.
+        # En STOP, el microprocesador está detenido y el registro permanece 100% congelado.
+        switch_run = bool(smb0 & 0x80) if smb0 is not None else False
+        scan_active = False
+
+        if smb0 is not None and smb0_end_val is not None:
+            if smb0 != smb0_end_val:
+                scan_active = True
+            else:
+                # Comprobación de confirmación (3ra muestra separada 40ms)
+                await asyncio.sleep(0.04)
+                smb0_check = await self.read_memory_area(area_code=0x05, start_byte=0, count=1, seq=6)
+                if smb0_check and smb0_check[0] != smb0_end_val:
+                    scan_active = True
+
+        is_run = switch_run or scan_active
 
         return {
             "smb0": smb0,
             "smb6": smb6,
             "smb7": smb7,
+            "is_run": is_run,
+            "switch_run": switch_run,
             "inputs": inputs,
             "outputs": outputs,
             "pots": pots
@@ -348,12 +373,11 @@ class BlePlcController:
         print(f"  • Modelo Detectado   : \033[1;32m{profile['name']}\033[0m ({profile['family']}){fw_info}")
 
         # Modo de la CPU
-        if data.get("smb0") is not None:
-            smb0 = data["smb0"]
-            is_run = bool(smb0 & 0x01)
-            switch_run = bool(smb0 & 0x80)
+        if "is_run" in data:
+            is_run = data["is_run"]
+            switch_run = data.get("switch_run", False)
             modo_str = "\033[92m● RUN (En Marcha)\033[0m" if is_run else "\033[91m■ STOP (Detenido)\033[0m"
-            llave_str = "RUN" if switch_run else "TERM / STOP"
+            llave_str = "RUN (Física)" if switch_run else "TERM / STOP"
             print(f"  • Estado Operativo   : {modo_str}")
             print(f"  • Posición de Llave  : {llave_str}")
         else:
@@ -510,8 +534,21 @@ class BlePlcController:
         cpu_id = smb6 & 0x0F
         profile = CPU_PROFILES.get(cpu_id, CPU_PROFILES[0x01])
 
-        is_run = bool(smb0 & 0x01)
-        switch_pos = "RUN" if (smb0 & 0x80) else "TERM / STOP"
+        # Muestreo dinámico de ciclo de scan
+        await asyncio.sleep(0.06)
+        smb0_end = await self.read_memory_area(area_code=0x05, start_byte=0, count=1, seq=11)
+        scan_active = False
+        if smb0_end and smb0_end[0] != smb0:
+            scan_active = True
+        else:
+            await asyncio.sleep(0.04)
+            smb0_c = await self.read_memory_area(area_code=0x05, start_byte=0, count=1, seq=12)
+            if smb0_c and smb0_c[0] != smb0:
+                scan_active = True
+
+        switch_run = bool(smb0 & 0x80)
+        is_run = switch_run or scan_active
+        switch_pos = "RUN (Física)" if switch_run else "TERM / STOP"
         baud_rate = getattr(self, "current_baud", 9600)
 
         fw_ver = f"Rel. {smb7:02X}" if smb7 != 0 else "Rel. 02.xx (Flash ROM nativa)"
