@@ -165,6 +165,18 @@ python3 scripts/ai_copilot.py --explain blocks/latest.awl
 
 *Inside `ia-coder`, you can converse naturally. It maintains memory, asks clarifying questions, advises on `--baud` or `--timeout` flags, and offers executable commands with `[s/N]` confirmation.*
 
+#### 📸 Standalone Terminal & AI Copilot in Action (No Micro/WIN Required!)
+You don't need to spin up a Windows virtual machine or open STEP 7-Micro/WIN for routine diagnostics, I/O verification, or operational switching. You can operate the autómata with plain natural language:
+
+* **Live CPU Hardware Diagnostics & I/O Telemetry:**
+  ![Live Status CPU 214 BLE](docs/screenshots/copilot_status_cpu214_ble.png)
+  *Real-time CPU 214 model auto-detection, onboard digital inputs (`I0.1: ● 1`), outputs, and analog potentiometers ($SMB28$ / $SMB29$) streamed wirelessly over Bluetooth LE.*
+
+* **Wireless Operational Control (STOP / RUN via Natural Language):**
+  | Natural Language STOP (`pon el plc en stop`) | Natural Language RUN (`pon el plc en run`) |
+  | :---: | :---: |
+  | ![STOP PLC BLE](docs/screenshots/copilot_stop_plc_ble.png) | ![RUN PLC BLE](docs/screenshots/copilot_run_plc_ble.png) |
+
 ---
 
 ### 7. Legacy STEP 7-Micro/WIN Virtual Machine & Smart Proxy (QEMU / KVM)
