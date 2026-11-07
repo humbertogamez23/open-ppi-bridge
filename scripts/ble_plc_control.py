@@ -54,6 +54,74 @@ def format_io_bits(byte_val: int, prefix: str, max_bits: int = 8) -> str:
         parts.append(f"{lbl}:{st}")
     return "  ".join(parts)
 
+
+CPU_PROFILES = {
+    0x00: {
+        "name": "CPU 212",
+        "family": "Serie 21x Legacy (Micro-PLC)",
+        "in_base": [(0, "I0", 8, "IB0")],                # 8 DI (I0.0 - I0.7)
+        "out_base": [(0, "Q0", 6, "QB0")],               # 6 DO (Q0.0 - Q0.5)
+        "exp_in_start": 1,
+        "exp_out_start": 1,
+    },
+    0x01: {
+        "name": "CPU 214",
+        "family": "Serie 21x Legacy (Compact PLC)",
+        "in_base": [(0, "I0", 8, "IB0"), (1, "I1", 6, "IB1")],  # 14 DI (I0.0 - I0.7 y I1.0 - I1.5)
+        "out_base": [(0, "Q0", 8, "QB0"), (1, "Q1", 2, "QB1")], # 10 DO (Q0.0 - Q0.7 y Q1.0 - Q1.1)
+        "exp_in_start": 2,
+        "exp_out_start": 2,
+    },
+    0x02: {
+        "name": "CPU 215",
+        "family": "Serie 21x Legacy (Profibus-DP)",
+        "in_base": [(0, "I0", 8, "IB0"), (1, "I1", 6, "IB1")],  # 14 DI
+        "out_base": [(0, "Q0", 8, "QB0"), (1, "Q1", 2, "QB1")], # 10 DO
+        "exp_in_start": 2,
+        "exp_out_start": 2,
+    },
+    0x03: {
+        "name": "CPU 216",
+        "family": "Serie 21x Legacy (Dual Port)",
+        "in_base": [(0, "I0", 8, "IB0"), (1, "I1", 8, "IB1"), (2, "I2", 8, "IB2")], # 24 DI
+        "out_base": [(0, "Q0", 8, "QB0"), (1, "Q1", 8, "QB1")],                      # 16 DO
+        "exp_in_start": 3,
+        "exp_out_start": 2,
+    },
+    0x04: {
+        "name": "CPU 221",
+        "family": "Serie 22x Industrial",
+        "in_base": [(0, "I0", 6, "IB0")],                # 6 DI (I0.0 - I0.5)
+        "out_base": [(0, "Q0", 4, "QB0")],               # 4 DO (Q0.0 - Q0.3)
+        "exp_in_start": None,
+        "exp_out_start": None,
+    },
+    0x05: {
+        "name": "CPU 222",
+        "family": "Serie 22x Industrial",
+        "in_base": [(0, "I0", 8, "IB0")],                # 8 DI (I0.0 - I0.7)
+        "out_base": [(0, "Q0", 6, "QB0")],               # 6 DO (Q0.0 - Q0.5)
+        "exp_in_start": 1,
+        "exp_out_start": 1,
+    },
+    0x06: {
+        "name": "CPU 224 / 224XP",
+        "family": "Serie 22x Industrial",
+        "in_base": [(0, "I0", 8, "IB0"), (1, "I1", 6, "IB1")],  # 14 DI (I0.0 - I0.7 y I1.0 - I1.5)
+        "out_base": [(0, "Q0", 8, "QB0"), (1, "Q1", 2, "QB1")], # 10 DO (Q0.0 - Q0.7 y Q1.0 - Q1.1)
+        "exp_in_start": 2,
+        "exp_out_start": 2,
+    },
+    0x07: {
+        "name": "CPU 226 / 226XM",
+        "family": "Serie 22x Industrial (Dual Port)",
+        "in_base": [(0, "I0", 8, "IB0"), (1, "I1", 8, "IB1"), (2, "I2", 8, "IB2")], # 24 DI
+        "out_base": [(0, "Q0", 8, "QB0"), (1, "Q1", 8, "QB1")],                      # 16 DO
+        "exp_in_start": 3,
+        "exp_out_start": 2,
+    },
+}
+
 class BlePlcController:
     def __init__(self, target_address=DEFAULT_MAC, plc_addr=PLC_ADDR, pc_addr=PC_ADDR, baud="auto"):
         self.target_address = target_address
@@ -87,17 +155,17 @@ class BlePlcController:
         else:
             print("[*] Negociando velocidad de bus RS485 (Auto-Baud 9.6k / 19.2k)...")
             await self.set_ble_baudrate(9600)
-            resp = await self.send_s7_request(pdu_init, timeout=1.2)
+            resp = await self.send_s7_request(pdu_init, timeout=1.6)
             if resp:
                 self.current_baud = 9600
-                print("[✓] Enlace sincronizado a 9.600 baudios (Serie 21x).")
+                print("[✓] Enlace sincronizado a 9.600 baudios.")
             else:
-                print("[*] Sin respuesta a 9.600. Conmutando a 19.200 baudios (Serie 22x industrial)...")
+                print("[*] Sin respuesta a 9.600 bps. Conmutando a 19.200 baudios...")
                 await self.set_ble_baudrate(19200)
                 resp = await self.send_s7_request(pdu_init, timeout=1.8)
                 if resp:
                     self.current_baud = 19200
-                    print("[✓] Enlace sincronizado a 19.200 baudios (Serie 22x detectada).")
+                    print("[✓] Enlace sincronizado a 19.200 baudios.")
 
     async def connect(self):
         print(f"[*] Conectando vía Bluetooth LE a {DEFAULT_NAME} ({self.target_address})...")
@@ -220,37 +288,40 @@ class BlePlcController:
             return False
 
     async def get_status_data(self):
-        """Obtiene una instantánea del estado, entradas y salidas."""
-        # 1. Leer SMB0 (Modo operativo)
-        smb0_data = await self.read_memory_area(area_code=0x05, start_byte=0, count=1, seq=1)
-        if smb0_data is None:
-            # Reintentar una vez por si hubo un paquete rezagado en el bus
-            await asyncio.sleep(0.05)
-            smb0_data = await self.read_memory_area(area_code=0x05, start_byte=0, count=1, seq=1)
-            if smb0_data is None:
-                return None
+        """Obtiene una instantánea del estado, identificación de CPU, entradas y salidas."""
+        # 1. Leer SMB0..SMB7 (Modo operativo, ID de CPU en SMB6, Firmware en SMB7)
+        smb_data = await self.read_memory_area(area_code=0x05, start_byte=0, count=8, seq=1)
+        if smb_data is None or len(smb_data) < 8:
+            await asyncio.sleep(0.06)
+            smb_data = await self.read_memory_area(area_code=0x05, start_byte=0, count=8, seq=1)
 
         await asyncio.sleep(0.04)
 
-        # 2. Leer Entradas Digitales (5 bytes: IB0 a IB4 para CPU 222 + 2x EM223 de 16 E/S)
+        # 2. Leer Entradas Digitales (5 bytes: IB0 a IB4 para cubrir base y expansiones)
         inputs = await self.read_memory_area(area_code=0x81, start_byte=0, count=5, seq=2)
         await asyncio.sleep(0.04)
 
-        # 3. Leer Salidas Digitales (5 bytes: QB0 a QB4 para CPU 222 + 2x EM223 de 16 E/S)
+        # 3. Leer Salidas Digitales (5 bytes: QB0 a QB4)
         outputs = await self.read_memory_area(area_code=0x82, start_byte=0, count=5, seq=3)
         await asyncio.sleep(0.04)
 
         # 4. Leer Potenciómetros Analógicos (SMB28, SMB29)
         pots = await self.read_memory_area(area_code=0x05, start_byte=28, count=2, seq=4)
 
+        smb0 = smb_data[0] if smb_data and len(smb_data) > 0 else None
+        smb6 = smb_data[6] if smb_data and len(smb_data) > 6 else None
+        smb7 = smb_data[7] if smb_data and len(smb_data) > 7 else None
+
         return {
-            "smb0": smb0_data[0] if smb0_data else None,
+            "smb0": smb0,
+            "smb6": smb6,
+            "smb7": smb7,
             "inputs": inputs,
             "outputs": outputs,
             "pots": pots
         }
 
-    async def display_status(self, data):
+    async def display_status(self, data, show_all_exp: bool = False):
         print("\n" + "=" * 65)
         print("          ESTADO INTEGRAL SIEMENS S7-200 [BLUETOOTH LE]")
         print("=" * 65)
@@ -264,8 +335,20 @@ class BlePlcController:
             print("=" * 65)
             return
 
+        # 1. Identificar modelo de CPU según SMB6
+        smb6 = data.get("smb6")
+        cpu_id = (smb6 & 0x0F) if smb6 is not None else 0x01  # Default CPU 214 si no se lee
+        profile = CPU_PROFILES.get(cpu_id, CPU_PROFILES[0x01])
+
+        fw_info = ""
+        smb7 = data.get("smb7")
+        if smb7 is not None and smb7 != 0:
+            fw_info = f" [FW Rel. {smb7:02X}]"
+
+        print(f"  • Modelo Detectado   : \033[1;32m{profile['name']}\033[0m ({profile['family']}){fw_info}")
+
         # Modo de la CPU
-        if data["smb0"] is not None:
+        if data.get("smb0") is not None:
             smb0 = data["smb0"]
             is_run = bool(smb0 & 0x01)
             switch_run = bool(smb0 & 0x80)
@@ -276,36 +359,65 @@ class BlePlcController:
         else:
             print(f"  • Estado del PLC     : \033[92mONLINE\033[0m")
 
+        # 2. Entradas Digitales (I)
         print("-" * 65)
-        print("  [ ENTRADAS DIGITALES (I) ]")
-        if data["inputs"] and len(data["inputs"]) >= 1:
-            print("  • CPU 222 Base      (IB0): " + format_io_bits(data["inputs"][0], "I0", 8))
-            if len(data["inputs"]) >= 2:
-                print("  • EM 223 #1 (16 DI) (IB1): " + format_io_bits(data["inputs"][1], "I1", 8) + "  [Canales 1..8]")
-            if len(data["inputs"]) >= 3:
-                print("                      (IB2): " + format_io_bits(data["inputs"][2], "I2", 8) + "  [Canales 9..16]")
-            if len(data["inputs"]) >= 4:
-                print("  • EM 223 #2 (16 DI) (IB3): " + format_io_bits(data["inputs"][3], "I3", 8) + "  [Canales 1..8]")
-            if len(data["inputs"]) >= 5:
-                print("                      (IB4): " + format_io_bits(data["inputs"][4], "I4", 8) + "  [Canales 9..16]")
+        in_bytes = data.get("inputs") or b""
+        total_di = sum(bits for _, _, bits, _ in profile["in_base"])
+        print(f"  [ ENTRADAS DIGITALES BASE ({profile['name']} - {total_di} DI Integradas) ]")
+        if in_bytes:
+            for byte_idx, prefix, bits, byte_label in profile["in_base"]:
+                if len(in_bytes) > byte_idx:
+                    b_val = in_bytes[byte_idx]
+                    note = f"  ({prefix}.0 a {prefix}.{bits-1})" if bits < 8 else ""
+                    print(f"  • {profile['name']} Base ({byte_label}): {format_io_bits(b_val, prefix, bits)}{note}")
+                else:
+                    print(f"  • {profile['name']} Base ({byte_label}): (No disponible)")
+
+            # Expansión de Entradas
+            exp_in_start = profile["exp_in_start"]
+            if exp_in_start is not None and len(in_bytes) > exp_in_start:
+                exp_bytes = in_bytes[exp_in_start:]
+                has_active = any(b != 0 for b in exp_bytes)
+                if has_active or show_all_exp:
+                    print("\n  [ MÓDULOS DE EXPANSIÓN (DI) ]")
+                    for i, b_val in enumerate(exp_bytes):
+                        real_byte = exp_in_start + i
+                        print(f"  • Expansión #{i+1}   (IB{real_byte}): {format_io_bits(b_val, f'I{real_byte}', 8)}")
+                else:
+                    print(f"  • Expansión (IB{exp_in_start}..IB{len(in_bytes)-1}): Sin módulos adicionales activos (0x00)")
         else:
             print("    (No se pudieron consultar entradas)")
 
+        # 3. Salidas Digitales (Q)
         print("-" * 65)
-        print("  [ SALIDAS DIGITALES (Q) ]")
-        if data["outputs"] and len(data["outputs"]) >= 1:
-            print("  • CPU 222 Base      (QB0): " + format_io_bits(data["outputs"][0], "Q0", 6) + "  (Q0.0 a Q0.5)")
-            if len(data["outputs"]) >= 2:
-                print("  • EM 223 #1 (16 DO) (QB1): " + format_io_bits(data["outputs"][1], "Q1", 8) + "  [Canales 1..8]")
-            if len(data["outputs"]) >= 3:
-                print("                      (QB2): " + format_io_bits(data["outputs"][2], "Q2", 8) + "  [Canales 9..16]")
-            if len(data["outputs"]) >= 4:
-                print("  • EM 223 #2 (16 DO) (QB3): " + format_io_bits(data["outputs"][3], "Q3", 8) + "  [Canales 1..8]")
-            if len(data["outputs"]) >= 5:
-                print("                      (QB4): " + format_io_bits(data["outputs"][4], "Q4", 8) + "  [Canales 9..16]")
+        out_bytes = data.get("outputs") or b""
+        total_do = sum(bits for _, _, bits, _ in profile["out_base"])
+        print(f"  [ SALIDAS DIGITALES BASE ({profile['name']} - {total_do} DO Integradas) ]")
+        if out_bytes:
+            for byte_idx, prefix, bits, byte_label in profile["out_base"]:
+                if len(out_bytes) > byte_idx:
+                    b_val = out_bytes[byte_idx]
+                    note = f"  ({prefix}.0 a {prefix}.{bits-1})" if bits < 8 else ""
+                    print(f"  • {profile['name']} Base ({byte_label}): {format_io_bits(b_val, prefix, bits)}{note}")
+                else:
+                    print(f"  • {profile['name']} Base ({byte_label}): (No disponible)")
+
+            # Expansión de Salidas
+            exp_out_start = profile["exp_out_start"]
+            if exp_out_start is not None and len(out_bytes) > exp_out_start:
+                exp_bytes = out_bytes[exp_out_start:]
+                has_active = any(b != 0 for b in exp_bytes)
+                if has_active or show_all_exp:
+                    print("\n  [ MÓDULOS DE EXPANSIÓN (DO) ]")
+                    for i, b_val in enumerate(exp_bytes):
+                        real_byte = exp_out_start + i
+                        print(f"  • Expansión #{i+1}   (QB{real_byte}): {format_io_bits(b_val, f'Q{real_byte}', 8)}")
+                else:
+                    print(f"  • Expansión (QB{exp_out_start}..QB{len(out_bytes)-1}): Sin módulos adicionales activos (0x00)")
         else:
             print("    (No se pudieron consultar salidas)")
 
+        # 4. Potenciómetros analógicos
         print("-" * 65)
         print("  [ POTENCIÓMETROS ANALÓGICOS (SMB28 / SMB29) ]")
         if data.get("pots") and len(data["pots"]) >= 2:
@@ -396,48 +508,39 @@ class BlePlcController:
         smb7 = smb_data[7]
 
         cpu_id = smb6 & 0x0F
-        cpu_models = {
-            0x00: ("CPU 212", "Serie 21x Legacy (Micro-PLC)", "9.600 bps", "8 DI / 6 DO"),
-            0x01: ("CPU 214", "Serie 21x Legacy (Compact PLC)", "9.600 bps", "14 DI / 10 DO (+7 EM)"),
-            0x02: ("CPU 215", "Serie 21x Legacy (Profibus-DP)", "9.600 bps", "14 DI / 10 DO (+7 EM)"),
-            0x03: ("CPU 216", "Serie 21x Legacy (Dual Port)", "9.600 bps", "24 DI / 16 DO (+7 EM)"),
-            0x04: ("CPU 221", "Serie 22x Industrial", "9.6k o 19.2k bps", "6 DI / 4 DO (Sin expansión)"),
-            0x05: ("CPU 222", "Serie 22x Industrial", "9.6k o 19.2k bps", "8 DI / 6 DO (+2 EM)"),
-            0x06: ("CPU 224 / 224XP", "Serie 22x Industrial", "9.6k o 19.2k bps", "14 DI / 10 DO (+7 EM)"),
-            0x07: ("CPU 226 / 226XM", "Serie 22x Industrial (Dual Port)", "9.6k o 19.2k bps", "24 DI / 16 DO (+7 EM)"),
-        }
-
-        model_info = cpu_models.get(cpu_id, (f"Desconocido (SMB6=0x{smb6:02X})", "Serie S7-200", "Variable", "N/A"))
+        profile = CPU_PROFILES.get(cpu_id, CPU_PROFILES[0x01])
 
         is_run = bool(smb0 & 0x01)
         switch_pos = "RUN" if (smb0 & 0x80) else "TERM / STOP"
-        baud_rate = getattr(self, "current_baud", 19200)
+        baud_rate = getattr(self, "current_baud", 9600)
 
         fw_ver = f"Rel. {smb7:02X}" if smb7 != 0 else "Rel. 02.xx (Flash ROM nativa)"
+        total_di = sum(bits for _, _, bits, _ in profile["in_base"])
+        total_do = sum(bits for _, _, bits, _ in profile["out_base"])
 
         print("\n" + "=" * 65)
         print("      IDENTIFICACIÓN DE HARDWARE SIEMENS SIMATIC S7-200")
         print("=" * 65)
-        print(f"  • Modelo de CPU       : \033[1;32m{model_info[0]}\033[0m")
-        print(f"  • Familia / Serie     : {model_info[1]}")
-        print(f"  • Registro SMB6 (ID)  : 0x{smb6:02X} (Código de CPU: {cpu_id})")
-        print(f"  • Versión de Firmware : {fw_ver}")
-        print(f"  • E/S Integradas Base : {model_info[3]}")
-        print(f"  • Velocidad Enlace    : {baud_rate} baudios (8E1)")
+        print(f"  • Modelo de CPU        : \033[1;32m{profile['name']}\033[0m")
+        print(f"  • Familia / Serie      : {profile['family']}")
+        print(f"  • Registro SMB6 (ID)   : 0x{smb6:02X} (Código de CPU: {cpu_id})")
+        print(f"  • Versión de Firmware  : {fw_ver}")
+        print(f"  • E/S Integradas Base  : {total_di} DI / {total_do} DO")
+        print(f"  • Velocidad Enlace     : {baud_rate} baudios (8E1)")
         print(f"  • Dirección de Estación: {self.plc_addr}")
-        print(f"  • Estado Operativo    : {'\033[92m● RUN (En Marcha)\033[0m' if is_run else '\033[91m■ STOP (Detenido)\033[0m'}")
-        print(f"  • Posición de Llave   : {switch_pos}")
+        print(f"  • Estado Operativo     : {'\033[92m● RUN (En Marcha)\033[0m' if is_run else '\033[91m■ STOP (Detenido)\033[0m'}")
+        print(f"  • Posición de Llave    : {switch_pos}")
         print("=" * 65)
         print("  💡 Nota Técnica:")
         print("  El modelo de CPU se lee directamente del registro de memoria")
         print("  especial SMB6 del firmware del autómata en tiempo de ejecución.")
         print("=" * 65)
 
-    async def run_status(self, watch=False):
+    async def run_status(self, watch=False, show_all_exp=False):
         if not watch:
             print(f"[*] Consultando estado operativo y E/S en la CPU {self.plc_addr}...")
             data = await self.get_status_data()
-            await self.display_status(data)
+            await self.display_status(data, show_all_exp=show_all_exp)
         else:
             print(f"[*] Modo monitor continuo activo (Ctrl+C para salir)...")
             last_valid_data = None
@@ -446,8 +549,8 @@ class BlePlcController:
                     data = await self.get_status_data()
                     if data is not None:
                         last_valid_data = data
-                    os.system('clear')
-                    await self.display_status(data if data is not None else last_valid_data)
+                    os.system('clear' if os.name == 'posix' else 'cls')
+                    await self.display_status(data if data is not None else last_valid_data, show_all_exp=show_all_exp)
                     await asyncio.sleep(0.15)
             except asyncio.CancelledError:
                 pass
@@ -460,6 +563,7 @@ async def async_main():
     parser.add_argument("--address", default=DEFAULT_MAC, help=f"Dirección MAC BLE (default: {DEFAULT_MAC})")
     parser.add_argument("--plc", type=int, default=PLC_ADDR, help=f"Dirección de la CPU (default: {PLC_ADDR})")
     parser.add_argument("--baud", default="auto", help="Velocidad en baudios: auto (conmuta 9.6k y 19.2k), 9600 o 19200 (default: auto)")
+    parser.add_argument("--expansion", action="store_true", help="Forzar visualización de todos los canales de expansión (IB2..IB4 / QB2..QB4)")
     args = parser.parse_args()
 
     cmd = args.command
@@ -470,7 +574,7 @@ async def async_main():
     try:
         await controller.connect()
         if cmd == "status":
-            await controller.run_status(watch=args.watch)
+            await controller.run_status(watch=args.watch, show_all_exp=args.expansion)
         elif cmd == "info":
             await controller.get_plc_info()
         elif cmd == "run":
