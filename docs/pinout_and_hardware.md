@@ -1,6 +1,8 @@
-# Hardware Pinout and Serial Interface Guide
+# Hardware Pinout, Wiring & Serial Interface Guide
 
-This document describes the physical and electrical interface required to communicate with a **Siemens SIMATIC S7-200 (CPU 214 Rel 00.91 / CPU 22x)** using a generic USB-to-RS485 adapter (such as FTDI FT232RL or CH340/CH343).
+This document describes the complete physical and electrical interface required to communicate with a **Siemens SIMATIC S7-200 (CPU 214 Rel 00.91 / CPU 22x)** PLC, either via:
+1. **Wireless Bluetooth LE Bridge:** ESP32-S3 acting as a Native USB Host connected to a generic USB-to-RS485 adapter.
+2. **Direct Wired USB-to-RS485:** Standard FTDI / CH340 / CP2102 adapter plugged directly into a Linux host.
 
 ---
 
@@ -18,7 +20,7 @@ The RS-485 interface on the front face of the S7-200 PLC uses a standard DB9 fem
 
 > [!CAUTION]
 > **Signal Ground (Pin 5) is Mandatory:**  
-> Never leave Pin 5 disconnected. Without a common ground reference between the host computer and the PLC, common-mode voltage fluctuations will saturate the differential receiver, causing silent packet loss and framing errors.
+> Never leave Pin 5 disconnected. Without a common ground reference between the adapter/ESP32 and the PLC, common-mode voltage fluctuations will saturate the differential receiver, causing silent packet loss and framing errors.
 
 > [!NOTE]
 > **Siemens Inverted Nomenclature Note:**  
@@ -28,7 +30,62 @@ The RS-485 interface on the front face of the S7-200 PLC uses a standard DB9 fem
 
 ---
 
-## 2. Port Configuration & Parameters
+## 2. Wireless BLE Bridge: ESP32-S3 (USB Host) Setup
+
+The ESP32-S3 firmware in [`firmware/esp32_s3`](file:///home/gus05/open-ppi-bridge/firmware/esp32_s3) uses the ESP32-S3's hardware USB OTG peripheral to operate in **USB Host mode**, talking directly to generic USB-to-RS485 dongles (FTDI FT232RL, CH340, CP2102) over the Virtual COM Port (VCP) driver.
+
+```
+┌──────────────────────────────────────┐          ┌───────────────────────┐          ┌─────────────────────────┐
+│        ESP32-S3 (USB Host)           │          │ Generic USB-to-RS485  │          │  Siemens SIMATIC S7-200 │
+│                                      │          │ (FTDI / CH340 Dongle) │          │     (DB9 Female Port)   │
+│  [5V / VBUS]  ───────────────────────┼──────────┤ VCC (+5V)             │          │                         │
+│  [GND]        ───────────────────────┼────┬─────┤ GND                   ├──────────┤ Pin 5 (Logic GND)       │
+│  [GPIO 19]    ─── (USB D-) ──────────┼────┼─────┤ D- (White Wire)       │          │                         │
+│  [GPIO 20]    ─── (USB D+) ──────────┼────┼─────┤ D+ (Green Wire)       │          │                         │
+│                                      │    │     │ A+ / D+ ──────────────┼──────────┤ Pin 3 (RS-485 Data + / B│
+│  [BLE Radio]  ◄··· Wireless NUS ···► │    │     │ B- / D- ──────────────┼──────────┤ Pin 8 (RS-485 Data - / A│
+└──────────────────────────────────────┘    │     └───────────────────────┘          └─────────────────────────┘
+                                            └─────────────────────────────────────────────────┘ (Mandatory Common GND)
+```
+
+### Physical Connection Options
+
+#### A. Plug-and-Play USB-C OTG (No Soldering Required)
+Many ESP32-S3 dual-port boards (such as the *ESP32-S3-DevKitC-1*) feature two USB-C connectors:
+1. `UART` (CH343/CP2102 port for serial console and flashing).
+2. `USB` (Native USB OTG connected directly to internal D-/D+ transceivers).
+
+Simply attach a standard **USB-C Male to USB-A Female OTG adapter** to the `USB` port, and plug your commercial USB-to-RS485 dongle into it.
+
+#### B. Header Pin Wiring (GPIO 19 / 20)
+If wiring a female USB-A socket directly or using an expansion board:
+
+| ESP32-S3 Pin | USB-A Female Socket Pin | Standard Wire Color | Purpose |
+| :--- | :---: | :---: | :--- |
+| **5V / VBUS / VIN** | **Pin 1 (VCC)** | Red | +5V DC power to the USB-RS485 dongle |
+| **GPIO 19 (USB D-)**| **Pin 2 (D-)** | White | Native USB differential data minus |
+| **GPIO 20 (USB D+)**| **Pin 3 (D+)** | Green | Native USB differential data plus |
+| **GND** | **Pin 4 (GND)** | Black | Common Ground |
+
+> [!TIP]
+> **Expansion Boards:**  
+> Using an ESP32 terminal expansion board (breakout board) makes bench testing easy by offering screw terminals for 5V, GND, GPIO 19, and GPIO 20. However, **an expansion board is NOT required**; you can connect jumper wires directly to the standard ESP32-S3 header pins or use a breadboard.
+
+---
+
+## 3. RS-485 Transceiver to S7-200 DB9 Wiring
+
+Whether using the ESP32-S3 bridge or a direct USB-to-RS485 adapter on a PC:
+
+| RS-485 Adapter Terminal | S7-200 DB9 Pin | Signal Name |
+| :--- | :---: | :--- |
+| **A+ (D+)** | **Pin 3** | RS-485 B (RxD/TxD+) |
+| **B- (D-)** | **Pin 8** | RS-485 A (RxD/TxD-) |
+| **GND** | **Pin 5** | Signal Ground Reference (Mandatory) |
+
+---
+
+## 4. Port Configuration & Parameters
 
 The factory-default communications profile for S7-200 PLCs (Port 0):
 

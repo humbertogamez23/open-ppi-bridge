@@ -204,21 +204,60 @@ bash vm/run_win7_vm.sh --ble
 
 ---
 
-## 🔌 Hardware Wiring (DB9 to USB-RS485)
+## 🔌 Hardware Wiring & Pinout Guide
 
-Connect the front DB9 female port of the S7-200 to your generic RS-485 transceiver:
+### 1. Wireless BLE Bridge: ESP32-S3 (USB Host) ➡️ USB-to-RS485 ➡️ S7-200 DB9
 
-| S7-200 DB9 Pin | Signal Name | Adapter Pin (FTDI / MAX485) | Note |
-| :---: | :---: | :---: | :--- |
-| **Pin 3** | **RS-485 B (Data +)** | **A+ / D+** | Non-inverting data |
-| **Pin 8** | **RS-485 A (Data -)** | **B- / D-** | Inverting data |
-| **Pin 5** | **GND (Signal Ground)** | **GND** | **Mandatory:** Prevents common-mode saturation |
+The wireless bridge turns the **ESP32-S3** into a **Native USB Host (OTG)** running the Nordic UART Service (NUS) over Bluetooth Low Energy. It connects directly to standard commercial USB-to-RS485 dongles (FTDI FT232RL, CH340, CP2102) without needing external transceivers or custom RTS direction circuitry.
+
+```
+┌──────────────────────────────────────┐          ┌───────────────────────┐          ┌─────────────────────────┐
+│        ESP32-S3 (USB Host)           │          │ Generic USB-to-RS485  │          │  Siemens SIMATIC S7-200 │
+│                                      │          │ (FTDI / CH340 Dongle) │          │     (DB9 Female Port)   │
+│  [5V / VBUS]  ───────────────────────┼──────────┤ VCC (+5V)             │          │                         │
+│  [GND]        ───────────────────────┼────┬─────┤ GND                   ├──────────┤ Pin 5 (Logic GND)       │
+│  [GPIO 19]    ─── (USB D-) ──────────┼────┼─────┤ D- (White Wire)       │          │                         │
+│  [GPIO 20]    ─── (USB D+) ──────────┼────┼─────┤ D+ (Green Wire)       │          │                         │
+│                                      │    │     │ A+ / D+ ──────────────┼──────────┤ Pin 3 (RS-485 Data + / B│
+│  [BLE Radio]  ◄··· Wireless NUS ···► │    │     │ B- / D- ──────────────┼──────────┤ Pin 8 (RS-485 Data - / A│
+└──────────────────────────────────────┘    │     └───────────────────────┘          └─────────────────────────┘
+                                            └─────────────────────────────────────────────────┘ (Mandatory Common GND)
+```
+
+#### Physical Wiring Options
+
+1. **Direct Plug-and-Play (Native USB-C OTG):**
+   * If your ESP32-S3 board has two Type-C ports (labeled `UART` and `USB`), plug the USB-RS485 dongle directly into the **`USB` port** using a simple USB-C OTG adapter.
+2. **GPIO Header Pins (with or without Expansion Board):**
+   * You can wire a female USB-A breakout jack directly to the ESP32-S3 header pins:
+     * **5V / VBUS** ➡️ USB Pin 1 (+5V Power)
+     * **GPIO 19**   ➡️ USB Pin 2 (D- / White wire)
+     * **GPIO 20**   ➡️ USB Pin 3 (D+ / Green wire)
+     * **GND**       ➡️ USB Pin 4 (Ground)
+   * *Note on Expansion Boards:* Using an ESP32-S3 breakout/expansion board with terminal blocks makes wiring very convenient on the bench, but **it is not mandatory**; standard breadboards or direct soldered connections work identically.
+
+#### RS-485 Adapter ➡️ S7-200 DB9 Female Port Pinout
+
+| Adapter Terminal | S7-200 DB9 Pin | Siemens Signal Name | Electrical Description |
+| :--- | :---: | :---: | :--- |
+| **A+ (D+)** | **Pin 3** | **RS-485 B (RxD/TxD+)** | Non-inverting differential data signal |
+| **B- (D-)** | **Pin 8** | **RS-485 A (RxD/TxD-)** | Inverting differential data signal |
+| **GND** | **Pin 5** | **GND (Masa lógica)** | **Mandatory:** Signal ground reference |
 
 > [!CAUTION]
-> Always connect **Pin 5 to GND**. Without a shared signal ground, differential line receivers will experience floating voltages and drop packets intermittently.
+> **Beware the Siemens A/B Inversion Trap:**  
+> Siemens S7-200 documentation designates Pin 3 as **"RS-485 B" (Data +)** and Pin 8 as **"RS-485 A" (Data -)**. Standard commercial RS-485 adapters label non-inverting as **A+** and inverting as **B-**. Always wire **Pin 3 to A+** and **Pin 8 to B-**.
+> 
+> **Common Ground (Pin 5) is Mandatory:**  
+> Always connect **Pin 5 to GND**. Floating differential receivers suffer from common-mode voltage saturation, leading to silent packet loss and framing errors.
 
-### Low Latency FTDI Setup (Linux)
-Reduce the kernel USB latency timer from 16 ms to 1 ms:
+---
+
+### 2. Direct Wired USB-to-RS485 Setup (Linux Host to PLC)
+
+If connecting directly from a PC/laptop via USB cable without BLE:
+* Connect your USB-RS485 converter to the S7-200 DB9 port following the same table above (Pins 3, 8, 5).
+* Configure the Linux kernel USB latency timer (defaults to 16 ms) down to **1 ms** to satisfy PROFIBUS 35 ms turnaround timeouts:
 ```bash
 echo 1 | sudo tee /sys/bus/usb-serial/devices/ttyUSB0/latency_timer
 sudo setserial /dev/ttyUSB0 low_latency
