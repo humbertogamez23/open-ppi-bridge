@@ -230,8 +230,11 @@ This project is licensed under the **GNU General Public License v3.0** (GPL-3.0)
 
 ---
 
-## 👤 Author & Acknowledgments
+## 👤 Author, Contact & Support
 
 * **Lead Engineer:** Humberto Gámez ([@humbertogamez23](https://github.com/humbertogamez23))
+* **Direct Contact & Community Support:**
+  * ✈️ **Telegram:** [@ingGustav](https://t.me/ingGustav)
+  * 💬 **WhatsApp:** `@gustav_gamez`
 * **Pair Programming & Architecture:** Antigravity AI (Google DeepMind)
 * **Dedicated to:** Open-source industrial automation and retro-computing communities worldwide.

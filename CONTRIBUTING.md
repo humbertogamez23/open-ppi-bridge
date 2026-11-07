@@ -71,3 +71,10 @@ Si estás probando herramientas de escritura (`plc_control.py`, `flash_s7_200.py
    * `refactor: ...` para mejoras de código sin cambio de comportamiento.
 4. Asegúrate de que el código no rompa compatibilidad con scripts existentes.
 5. Envía tu **Pull Request** detallando los cambios y el hardware utilizado para pruebas.
+
+---
+
+## 💬 Dudas y Soporte Directo
+Si tienes preguntas sobre el conexionado, compatibilidad de hardware o ideas para colaborar:
+* **Telegram:** [@ingGustav](https://t.me/ingGustav)
+* **WhatsApp:** `@gustav_gamez`
