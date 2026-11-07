@@ -236,6 +236,26 @@ A mobile **Pocket HMI** built with **Flutter** connects wirelessly to the **ESP3
 
 ---
 
+## 🏛️ Prior Art, Acknowledgments & Technical Breakthroughs
+
+While open-source automation engineers have explored Siemens protocols for decades, the native **Point-to-Point Interface (PPI)** protocol and internal bytecode execution engine of the **S7-200** family remained historically incomplete, undocumented, and locked behind proprietary software.
+
+We honor the early open-source pioneers whose partial implementations and packet dissections served as initial inspiration:
+* **[libnodave](http://libnodave.sourceforge.net/)** *(Thomas Hergenhahn)* — Demonstrated early proof-of-concept serial variable reading.
+* **[Snap7](https://snap7.sourceforge.net/)** *(Davide Nardella)* — Provided architectural insights into higher-level S7comm PDU construction.
+* **[Wireshark S7comm Dissector](https://github.com/wireshark/wireshark)** *(Thomas Wiens)* — Aided in baseline PROFIBUS FDL packet frame boundary identification.
+* **[Bleak](https://github.com/hbldh/bleak)** & **[pyserial](https://github.com/pyserial/pyserial)** — Provided reliable asynchronous Bluetooth LE and serial communication primitives in Python.
+
+### 🌟 What makes `open-ppi-bridge` the First Complete Solution:
+None of the historical projects fully cracked the S7-200 PPI protocol stack end-to-end. `open-ppi-bridge` achieved what was previously unsolved:
+1. **Full Block Upload & Download (`_INSE`, `_DOWN`, `_ENDB`, `_DELE`):** First open implementation to successfully negotiate block allocation, multi-chunk bytecode fetch, and hardware EEPROM burn cycles.
+2. **Strict PROFIBUS FDL FCB Alternation:** Solved the undocumented slave duplicate rule (`0x5C` $\leftrightarrow$ `0x7C`), eliminating transaction drops and error `0xD240`.
+3. **Native Bytecode Assembler & Disassembler (`s7_awl_asm.py`):** First independent tool capable of compiling and disassembling binary bytecode directly to/from human-readable Statement List (AWL).
+4. **Autonomous Wireless Hardware Bridge (ESP32-S3):** Completely untethered industrial wireless communication with dynamic auto-baud switching (9.6k / 19.2k).
+5. **Smart Anti-960B MITM Proxy:** Rescues legacy STEP 7-Micro/WIN in virtual machines by transparently fragmenting fatal 960-byte requests into safe 240-byte chunks on CPU 21x hardware.
+
+---
+
 ## 📄 License
 
 This project is licensed under the **GNU General Public License v3.0** (GPL-3.0) — see the [LICENSE](LICENSE) file for details.
