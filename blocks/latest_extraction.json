@@ -1,10 +1,10 @@
 {
-  "bin_file": "contexxor_ob1_20261106_013243.bin",
-  "awl_file": "contexxor_ob1_20261106_013243.awl",
-  "bin_url": "file:///home/gus05/open-ppi-bridge/blocks/contexxor_ob1_20261106_013243.bin",
-  "awl_url": "file:///home/gus05/open-ppi-bridge/blocks/contexxor_ob1_20261106_013243.awl",
+  "bin_file": "proyectorama.bin",
+  "awl_file": "proyectorama.awl",
+  "bin_url": "file:///home/gus05/open-ppi-bridge/blocks/proyectorama.bin",
+  "awl_url": "file:///home/gus05/open-ppi-bridge/blocks/proyectorama.awl",
   "block": "OB1",
   "plc_addr": 2,
-  "size_bytes": 501,
-  "timestamp": "2026-11-06 01:32:43"
+  "size_bytes": 308,
+  "timestamp": "2026-11-07 00:50:27"
 }
