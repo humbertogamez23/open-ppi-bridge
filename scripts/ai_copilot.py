@@ -335,6 +335,11 @@ def show_available_scripts():
 🤖 7. ASISTENTE DE IA
    • scripts/ai_copilot.py (ia-coder) -> Asistente interactivo (--chat), auditoría (--audit),
      explicación (--explain) y generación de código (--generate).
+
+💻 8. VIRTUALIZACIÓN STEP 7-Micro/WIN (QEMU / KVM)
+   • vm/setup_win7_vm.sh -> Asistente automatizado para crear e instalar VM Windows 7.
+   • vm/run_win7_vm.sh [--ble] -> Lanzador de producción con filtro anti-960B y COM1 virtual.
+   • scripts/web_transfer.py -> Servidor HTTP de intercambio de archivos (.mwp/.awl) en http://10.0.2.2:8000.
 ================================================================================
 """)
 

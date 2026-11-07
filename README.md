@@ -167,21 +167,28 @@ python3 scripts/ai_copilot.py --explain blocks/latest.awl
 
 ---
 
-### 7. Legacy STEP 7-Micro/WIN Smart Proxy (QEMU / KVM)
-If you require original STEP 7-Micro/WIN in a Windows virtual machine:
+### 7. Legacy STEP 7-Micro/WIN Virtual Machine & Smart Proxy (QEMU / KVM)
+If you require original Siemens STEP 7-Micro/WIN in a Windows 7 virtual machine:
 
-1. **Start the Proxy:**
-   ```bash
-   python3 scripts/ppi_proxy.py
-   ```
-2. **Start QEMU mapping the serial socket:**
-   ```bash
-   qemu-system-x86_64 -enable-kvm -m 2048 \
-       -drive file=win7.qcow2,format=qcow2 \
-       -chardev socket,id=serial0,path=/tmp/qemu_serial.sock \
-       -serial chardev:serial0
-   ```
-3. In Micro/WIN, select **PC/PPI cable (COM1)** at 9600 bps. Program upload and download will complete with 100% success.
+#### Quick Automated Setup (1 Command)
+Having your Windows 7 ISO file ready, run the interactive installer wizard:
+```bash
+bash vm/setup_win7_vm.sh /path/to/windows7.iso
+```
+*It verifies KVM virtualization, creates the dynamic 30GB virtual disk, mounts the ISO, configures COM1 with the anti-960B proxy filter, and launches the Windows installer.*
+
+#### Daily Usage
+Once installed, start the virtual machine anytime:
+```bash
+# Wired RS-485 (FTDI / CH343)
+bash vm/run_win7_vm.sh
+
+# Or 100% wireless via Bluetooth LE
+bash vm/run_win7_vm.sh --ble
+```
+* Inside Windows 7 Micro/WIN, select **PC/PPI cable (COM1)** at 9600 bps. Program upload and download will complete with 100% success.
+* Exchange `.mwp` and `.awl` files effortlessly by browsing to `http://10.0.2.2:8000` inside the VM.
+* See [vm/README.md](file:///home/gus05/open-ppi-bridge/vm/README.md) for full architecture details and troubleshooting.
 
 ---
 
