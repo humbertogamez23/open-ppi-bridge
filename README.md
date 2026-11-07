@@ -208,33 +208,42 @@ bash vm/run_win7_vm.sh --ble
 
 ### 1. Wireless BLE Bridge: ESP32-S3 (USB Host) ➡️ USB-to-RS485 ➡️ S7-200 DB9
 
-The wireless bridge turns the **ESP32-S3** into a **Native USB Host (OTG)** running the Nordic UART Service (NUS) over Bluetooth Low Energy. It connects directly to standard commercial USB-to-RS485 dongles (FTDI FT232RL, CH340, CP2102) without needing external transceivers or custom RTS direction circuitry.
+The wireless bridge turns the **ESP32-S3** into a **Native USB Host (OTG)** running the Nordic UART Service (NUS) over Bluetooth Low Energy. It connects directly to a standard commercial **FTDI FT232RL USB-to-RS485 module** using native USB CDC/VCP support (`vcp_ftdi.hpp`), eliminating the need for external transceivers or custom RTS direction circuitry.
 
 ```
 ┌──────────────────────────────────────┐          ┌───────────────────────┐          ┌─────────────────────────┐
-│        ESP32-S3 (USB Host)           │          │ Generic USB-to-RS485  │          │  Siemens SIMATIC S7-200 │
-│                                      │          │ (FTDI / CH340 Dongle) │          │     (DB9 Female Port)   │
-│  [5V / VBUS]  ───────────────────────┼──────────┤ VCC (+5V)             │          │                         │
-│  [GND]        ───────────────────────┼────┬─────┤ GND                   ├──────────┤ Pin 5 (Logic GND)       │
-│  [GPIO 19]    ─── (USB D-) ──────────┼────┼─────┤ D- (White Wire)       │          │                         │
-│  [GPIO 20]    ─── (USB D+) ──────────┼────┼─────┤ D+ (Green Wire)       │          │                         │
+│        ESP32-S3 (USB Host)           │          │ Female USB-A Port +   │          │  Siemens SIMATIC S7-200 │
+│                                      │          │ Módulo FTDI FT232RL   │          │     (DB9 Female Port)   │
+│  [5V Rail (Expansion Board / Ext)] ──┼──────────┤ Pin 1: VCC (+5V Ext)  │          │                         │
+│  [GND Común] ────────────────────────┼────┬─────┤ Pin 4: GND            ├──────────┤ Pin 5 (Logic GND)       │
+│  [GPIO 19] ─── (USB D-) ─────────────┼────┼─────┤ Pin 2: D- (White Wire)│          │                         │
+│  [GPIO 20] ─── (USB D+) ─────────────┼────┼─────┤ Pin 3: D+ (Green Wire)│          │                         │
+│                                      │    │     │                       │          │                         │
+│                                      │    │     │ [FT232RL Terminals]   │          │                         │
 │                                      │    │     │ A+ / D+ ──────────────┼──────────┤ Pin 3 (RS-485 Data + / B│
 │  [BLE Radio]  ◄··· Wireless NUS ···► │    │     │ B- / D- ──────────────┼──────────┤ Pin 8 (RS-485 Data - / A│
 └──────────────────────────────────────┘    │     └───────────────────────┘          └─────────────────────────┘
                                             └─────────────────────────────────────────────────┘ (Mandatory Common GND)
 ```
 
-#### Physical Wiring Options
+#### ⚡ Critical Hardware Gotcha: ESP32-S3 DevKit 5V Protection Diodes
 
-1. **Direct Plug-and-Play (Native USB-C OTG):**
-   * If your ESP32-S3 board has two Type-C ports (labeled `UART` and `USB`), plug the USB-RS485 dongle directly into the **`USB` port** using a simple USB-C OTG adapter.
-2. **GPIO Header Pins (with or without Expansion Board):**
-   * You can wire a female USB-A breakout jack directly to the ESP32-S3 header pins:
-     * **5V / VBUS** ➡️ USB Pin 1 (+5V Power)
-     * **GPIO 19**   ➡️ USB Pin 2 (D- / White wire)
-     * **GPIO 20**   ➡️ USB Pin 3 (D+ / Green wire)
-     * **GND**       ➡️ USB Pin 4 (Ground)
-   * *Note on Expansion Boards:* Using an ESP32-S3 breakout/expansion board with terminal blocks makes wiring very convenient on the bench, but **it is not mandatory**; standard breadboards or direct soldered connections work identically.
+> [!WARNING]
+> **Why Direct USB-C OTG Adapters Fail on ESP32-S3 DevKits:**  
+> Commercial ESP32-S3 development boards feature onboard **Schottky protection diodes** in series with the Type-C VBUS line to prevent reverse current from flowing back into host computers. Because these diodes block current flowing out from the board, **the onboard Type-C port CANNOT supply 5V to external USB devices in USB Host mode.**  
+> If you attach a generic USB-C OTG adapter directly into the dev board's Type-C port, the FT232RL module receives **0V** and will not power up!
+
+#### Physical Wiring: Female USB-A Connector + 5V Injection
+
+To properly power and interface the FTDI FT232RL module:
+1. Wire a **Female USB-A breakout connector** (or cut USB cable) to the ESP32-S3:
+   * **Pin 1 (VCC +5V - Red):** Connect to the **+5V rail** (supplied via the expansion board terminal or an external 5V regulated power supply).
+   * **Pin 2 (D- - White):** Connect to **GPIO 19** on the ESP32-S3 (native USB D-).
+   * **Pin 3 (D+ - Green):** Connect to **GPIO 20** on the ESP32-S3 (native USB D+).
+   * **Pin 4 (GND - Black):** Connect to **GND** (common ground between ESP32-S3, power supply, and PLC).
+2. **Expansion Board Note:**  
+   Using an ESP32-S3 terminal expansion board (breakout board) is ideal on the bench because it provides ready-to-use screw terminals for 5V and GND. However, **the expansion board is NOT strictly necessary**: any clean 5V power source sharing a common ground with the ESP32-S3 will work identically.
+3. Plug your **FTDI FT232RL USB-RS485 module** into this female USB-A connector. The ESP32-S3 firmware initializes it automatically upon boot.
 
 #### RS-485 Adapter ➡️ S7-200 DB9 Female Port Pinout
 
